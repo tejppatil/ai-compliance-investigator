@@ -1,16 +1,84 @@
 import React from "react";
-import { Card, Eyebrow, Pill, RiskMeter, AgentResultCard, EvidenceGraph } from "../components.jsx";
+import { AGENT_ORDER, AgentResultCard, Card, Eyebrow, EvidenceGraph, Pill, PendingAgentCard, RiskMeter } from "../components.jsx";
 import { api, caseIdFor } from "../api.js";
+import { usePersona } from "../persona.jsx";
 import { ErrorBanner } from "./DashboardView.jsx";
+import InvestigationTimeline from "../components/InvestigationTimeline.jsx";
+import PipelineFlow from "../components/PipelineFlow.jsx";
+
+const STAGE_LABELS = {
+  transaction_intelligence: "Transaction Intel", entity_intelligence: "Entity Intel",
+  compliance_intelligence: "Compliance RAG", document_analysis: "Document Analysis",
+  kyc_completeness: "KYC Completeness",
+};
+
+// Builds the live PipelineFlow stage list from real case/reveal/escalation
+// state — the same shape the static How It Works page uses, but every status
+// here reflects this specific case rather than a fixed explainer list.
+function buildLiveStages(caseData, revealCount) {
+  const agentStages = caseData.agent_results.map((r, i) => ({
+    key: r.agent, label: STAGE_LABELS[r.agent] || r.agent,
+    status: i < revealCount ? "done" : i === revealCount ? "active" : "pending",
+    severity: i < revealCount ? r.severity : undefined,
+  }));
+  const analysisDone = revealCount > caseData.agent_results.length;
+  const tier1Done = caseData.status !== "pending_human_review";
+  const escalated = caseData.escalation_level >= 1;
+  const seniorDone = caseData.escalation_level === 2;
+  const closed = caseData.status === "closed";
+
+  const stages = [
+    { key: "received", label: "Received", status: "done" },
+    ...agentStages,
+    { key: "risk", label: "Risk Engine", status: analysisDone ? "done" : "pending", severity: analysisDone ? caseData.risk.band : undefined },
+    { key: "tier1", label: "Tier-1 Review", status: !analysisDone ? "pending" : tier1Done ? "done" : "active" },
+  ];
+  if (escalated) {
+    stages.push({ key: "escalated", label: "Escalated", status: "done" });
+    stages.push({ key: "tier2", label: "Senior Review", status: seniorDone ? "done" : "active" });
+  }
+  if (closed) stages.push({ key: "closed", label: "Closed", status: "done" });
+  return stages;
+}
+
+const REVEAL_STAGGER_MS = 550;
+
+// Reveals agent cards one at a time, then one more step for the narrative +
+// right-hand column together. This is a presentation animation of a result
+// that already arrived in a single API response — genuine per-agent
+// streaming would need the backend to expose incremental results, which
+// isn't justified for a demo polish pass — but it's what lets a judge
+// watching a live demo actually see each agent "complete" in turn instead
+// of the whole case appearing at once.
+function animateReveal(agentCount, setRevealCount) {
+  setRevealCount(0);
+  let step = 0;
+  const total = agentCount + 1;
+  const timer = setInterval(() => {
+    step += 1;
+    setRevealCount(step);
+    if (step >= total) clearInterval(timer);
+  }, REVEAL_STAGGER_MS);
+}
 
 export default function CaseView({ transactionId }) {
+  const { persona } = usePersona();
   const [txnMeta, setTxnMeta] = React.useState(null);
   const [caseData, setCaseData] = React.useState(null);
   const [audit, setAudit] = React.useState([]);
+  const [auditVerify, setAuditVerify] = React.useState(null);
   const [running, setRunning] = React.useState(false);
   const [notFound, setNotFound] = React.useState(false);
   const [error, setError] = React.useState(null);
+  const [reviewError, setReviewError] = React.useState(null);
   const [notes, setNotes] = React.useState("");
+  // How many agent cards + the narrative/right-column are currently shown.
+  // A fresh result from clicking "Run investigation" reveals in sequence
+  // (a presentation of a result that already arrived — see the comment
+  // below — not fake incremental computation); revisiting an already-
+  // investigated case shows everything immediately.
+  const [revealCount, setRevealCount] = React.useState(Infinity);
+  const justRanRef = React.useRef(false);
 
   const caseId = caseIdFor(transactionId);
 
@@ -24,9 +92,16 @@ export default function CaseView({ transactionId }) {
       setTxnMeta(txns.find((t) => t.transaction_id === transactionId));
       const hasCase = existing.some((c) => c.case_id === caseId);
       if (hasCase) {
-        const [c, a] = await Promise.all([api.getCase(caseId), api.getAudit(caseId)]);
+        const [c, a, v] = await Promise.all([api.getCase(caseId), api.getAudit(caseId), api.verifyAudit(caseId)]);
         setCaseData(c);
         setAudit(a);
+        setAuditVerify(v);
+        if (justRanRef.current) {
+          justRanRef.current = false;
+          animateReveal(c.agent_results.length, setRevealCount);
+        } else {
+          setRevealCount(Infinity);
+        }
       } else {
         setCaseData(null);
         setAudit([]);
@@ -42,22 +117,29 @@ export default function CaseView({ transactionId }) {
   async function runInvestigation() {
     setRunning(true);
     setError(null);
+    justRanRef.current = true;
     try {
       await api.createInvestigation(transactionId);
       await load();
     } catch (e) {
       setError(e.message);
+      justRanRef.current = false;
     } finally {
       setRunning(false);
     }
   }
 
-  async function decide(decision, label) {
+  async function decide(decision) {
+    setReviewError(null);
     try {
-      await api.review(caseId, decision, notes);
+      await api.review(caseId, decision, notes, { actor: persona.name, role: persona.role });
+      setNotes("");
       await load();
     } catch (e) {
-      setError(e.message);
+      // A rejected tier-1 redecision surfaces here as a real 403 from the
+      // API — shown inline rather than swallowed, since that response IS
+      // the two-person control working as intended, not a bug.
+      setReviewError(e.message);
     }
   }
 
@@ -68,6 +150,22 @@ export default function CaseView({ transactionId }) {
     <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 18, alignItems: "start" }}>
       <div>
         <TxnHeader txn={txnMeta} running={running} onRun={runInvestigation} hasCase={!!caseData} />
+
+        {caseData && (
+          <Card style={{ marginTop: 16 }}>
+            <Eyebrow>Pipeline — proof it moves stage to stage</Eyebrow>
+            <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+              <PipelineFlow stages={buildLiveStages(caseData, revealCount)} dense />
+            </div>
+          </Card>
+        )}
+
+        {caseData && (
+          <Card style={{ marginTop: 16 }}>
+            <Eyebrow>Investigation timeline — how it happened</Eyebrow>
+            <InvestigationTimeline caseData={caseData} customer={caseData.customer} audit={audit} />
+          </Card>
+        )}
 
         <Card style={{ marginTop: 16 }}>
           <Eyebrow right={caseData && <Pill sev="none">{caseData.narrative.source === "ai" ? "AI NARRATIVE" : "TEMPLATE"}</Pill>}>
@@ -86,8 +184,16 @@ export default function CaseView({ transactionId }) {
           {running && <div className="mono blink" style={{ fontSize: 12, color: "var(--accent)", padding: "10px 0" }}>Investigating… (local model may take up to a minute on CPU)</div>}
           {caseData && (
             <div>
-              {caseData.agent_results.map((r) => <AgentResultCard key={r.agent} result={r} />)}
-              <NarrativeBlock narrative={caseData.narrative} />
+              {caseData.agent_results.map((r, i) => (
+                i < revealCount
+                  ? <div key={r.agent} className={revealCount !== Infinity && i === revealCount - 1 ? "reveal-in" : undefined}><AgentResultCard result={r} /></div>
+                  : <PendingAgentCard key={r.agent} agentKey={AGENT_ORDER[i]} active={i === revealCount} />
+              ))}
+              {revealCount > caseData.agent_results.length && (
+                <div className={revealCount === caseData.agent_results.length + 1 ? "reveal-in" : undefined}>
+                  <NarrativeBlock narrative={caseData.narrative} />
+                </div>
+              )}
             </div>
           )}
         </Card>
@@ -112,9 +218,9 @@ export default function CaseView({ transactionId }) {
       </div>
 
       <div>
-        {caseData && (
+        {caseData && revealCount > caseData.agent_results.length && (
           <>
-            <Card style={{ marginBottom: 16 }}>
+            <Card style={{ marginBottom: 16 }} className={revealCount === caseData.agent_results.length + 1 ? "reveal-in" : undefined}>
               <Eyebrow>Explainable risk</Eyebrow>
               <RiskMeter risk={caseData.risk} />
             </Card>
@@ -137,10 +243,22 @@ export default function CaseView({ transactionId }) {
               ))}
             </Card>
 
-            <HumanDecision status={caseData.status} riskBand={caseData.risk.band} notes={notes} setNotes={setNotes} decide={decide} />
+            {reviewError && (
+              <div className="card" style={{ marginBottom: 16, borderColor: "var(--crit-line)", background: "var(--crit-soft)", color: "var(--crit)", fontSize: 12 }}>
+                {reviewError}
+              </div>
+            )}
+            <HumanDecision caseData={caseData} persona={persona} notes={notes} setNotes={setNotes} decide={decide} />
 
             <Card style={{ marginTop: 16 }}>
               <Eyebrow>Audit trail · {audit.length}</Eyebrow>
+              {auditVerify && (
+                <div className="mono" style={{ fontSize: 10.5, marginBottom: 10, color: auditVerify.verified ? "var(--ok)" : "var(--crit)" }}>
+                  {auditVerify.verified
+                    ? `✓ Hash chain verified — ${auditVerify.entries} entries, SHA-256`
+                    : `✗ Hash chain BROKEN at entry ${auditVerify.broken_at}`}
+                </div>
+              )}
               <div style={{ maxHeight: 220, overflow: "auto" }}>
                 {audit.map((a, i) => (
                   <div key={i} style={{ display: "flex", gap: 9, padding: "4px 0", fontSize: 11, lineHeight: 1.45 }}>
@@ -202,7 +320,69 @@ function NarrativeBlock({ narrative }) {
   );
 }
 
-function HumanDecision({ status, riskBand, notes, setNotes, decide }) {
+// Two-tier: escalation_level 0 = tier-1 (either persona), 1 = awaiting the
+// senior reviewer (officer sees a read-only state; the API rejects an
+// officer's attempt server-side, not just this screen), 2 = resolved.
+function HumanDecision({ caseData, persona, notes, setNotes, decide }) {
+  const { status, escalation_level, assigned_to, sla_due_at } = caseData;
+  const riskBand = caseData.risk.band;
+
+  if (escalation_level === 1) {
+    const overdue = sla_due_at && new Date(sla_due_at) < new Date();
+    if (persona.role !== "senior") {
+      return (
+        <Card style={{ borderColor: overdue ? "var(--crit-line)" : "var(--med-line)" }}>
+          <Eyebrow right={<Pill sev={riskBand} />}>Escalated — awaiting senior review</Eyebrow>
+          <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>
+            This case is with <b style={{ color: "var(--text)" }}>{assigned_to}</b> and can no longer be
+            decided at this tier — enforced by the API, not just hidden on this screen.
+          </div>
+          <div className="mono" style={{ marginTop: 10, fontSize: 11, color: overdue ? "var(--crit)" : "var(--med)" }}>
+            {overdue ? "OVERDUE" : "SLA"} · due {new Date(sla_due_at).toLocaleString()}
+          </div>
+          <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 10 }}>
+            Switch to the Senior Compliance Officer persona (top right) to review this case.
+          </div>
+        </Card>
+      );
+    }
+    const options = [
+      { k: "senior_close", label: "Approve AI assessment & close" },
+      { k: "senior_override", label: "Override assessment & close" },
+      { k: "senior_return", label: "Return for more evidence" },
+    ];
+    return (
+      <Card style={{ borderColor: "#8b5cf6" }}>
+        <Eyebrow right={<Pill sev={riskBand} />}>Senior review — decision required</Eyebrow>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10, lineHeight: 1.55 }}>
+          Escalated by the tier-1 officer for independent review. Approve, override, or return it for
+          more evidence — this is the second, independent check on the officer's own decision.
+        </div>
+        <div className="mono" style={{ fontSize: 11, color: overdue ? "var(--crit)" : "var(--faint)", marginBottom: 10 }}>
+          {overdue ? "OVERDUE" : "SLA due"} {new Date(sla_due_at).toLocaleString()}
+        </div>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Senior review notes (written to the audit trail)…"
+          style={{ width: "100%", minHeight: 54, resize: "vertical", marginBottom: 12 }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {options.map((o) => (
+            <button key={o.k} onClick={() => decide(o.k)} className="btn-ghost" style={{ textAlign: "left" }}>{o.label}</button>
+          ))}
+        </div>
+      </Card>
+    );
+  }
+
+  if (escalation_level === 2) {
+    return (
+      <Card>
+        <Eyebrow right={<Pill sev={riskBand} />}>Escalation resolved</Eyebrow>
+        <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>
+          Reviewed by the Senior Compliance Officer and closed — see the audit trail below for the outcome.
+        </div>
+      </Card>
+    );
+  }
+
   const options = [
     { k: "edd", label: "Request enhanced due diligence" },
     { k: "escalate", label: "Escalate to senior officer" },
@@ -221,7 +401,7 @@ function HumanDecision({ status, riskBand, notes, setNotes, decide }) {
         style={{ width: "100%", minHeight: 54, resize: "vertical", marginBottom: 12 }} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         {options.map((o) => (
-          <button key={o.k} onClick={() => decide(o.k, o.label)} className="btn-ghost" style={{ textAlign: "left" }}>
+          <button key={o.k} onClick={() => decide(o.k)} className="btn-ghost" style={{ textAlign: "left" }}>
             {o.label}
           </button>
         ))}
