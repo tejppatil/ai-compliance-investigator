@@ -23,6 +23,15 @@ CUSTOMERS = {
                        industry="Freight & logistics", onboarded="2021-07-02", entity_id="E-D"),
     "C-1003": Customer(customer_id="C-1003", name="Kaveri Exports Pvt Ltd", country="India",
                        industry="Agri commodities", risk_profile="elevated", onboarded="2022-11-19", entity_id="E-K"),
+    # A clean Risk-Based Approach demo: nothing about THIS transaction is
+    # anomalous on its own (amount near baseline, established counterparty,
+    # no shared directors, well-documented) — it lands MEDIUM/HIGH only
+    # because of the customer's own persistent risk rating (FATF R.1), making
+    # the customer_risk dimension visibly the deciding factor rather than one
+    # contributor among several.
+    "C-1004": Customer(customer_id="C-1004", name="Continental Bullion Traders Pvt Ltd", country="India",
+                       industry="Precious metals & bullion trading", risk_profile="high",
+                       onboarded="2020-06-15", entity_id="E-M"),
 }
 
 # Historical transactions drive DETERMINISTIC stats. Median of C-1001 = 7,700,000.
@@ -51,6 +60,16 @@ HISTORY: dict[str, list[dict]] = {
         {"amount": 985_000, "dest": "UAE", "date": "2025-07-27"},
         {"amount": 995_000, "dest": "UAE", "date": "2025-08-02"},
     ],
+    "C-1004": [
+        # Deliberately kept outside the trailing-30-day window from the demo
+        # transaction (2025-08-10) so the velocity signal never fires here —
+        # this customer's baseline behaviour is genuinely unremarkable.
+        {"amount": 2_950_000, "dest": "Singapore", "date": "2025-02-10"},
+        {"amount": 3_050_000, "dest": "Singapore", "date": "2025-03-15"},
+        {"amount": 3_100_000, "dest": "Singapore", "date": "2025-04-20"},
+        {"amount": 2_980_000, "dest": "Singapore", "date": "2025-05-25"},
+        {"amount": 3_050_000, "dest": "Singapore", "date": "2025-06-28"},
+    ],
 }
 
 ENTITIES = {
@@ -64,9 +83,15 @@ ENTITIES = {
                   country="India", registered="2021-07-02", directors=["P-Z"]),
     "E-K": Entity(entity_id="E-K", name="Kaveri Exports Pvt Ltd", entity_type="company",
                   country="India", registered="2022-11-19", directors=["P-Z"]),
+    "E-M": Entity(entity_id="E-M", name="Continental Bullion Traders Pvt Ltd", entity_type="company",
+                  country="India", registered="2020-06-15", directors=["P-M"]),
+    "E-N": Entity(entity_id="E-N", name="Straits Precious Metals Pte Ltd", entity_type="company",
+                  country="Singapore", registered="2017-02-10", directors=["P-N"]),
     "P-X": Entity(entity_id="P-X", name="Rajiv Menon", entity_type="individual", country="India"),
     "P-Y": Entity(entity_id="P-Y", name="Lian Tan", entity_type="individual", country="Singapore"),
     "P-Z": Entity(entity_id="P-Z", name="Ananya Krishnan", entity_type="individual", country="India"),
+    "P-M": Entity(entity_id="P-M", name="Vikram Oberoi", entity_type="individual", country="India"),
+    "P-N": Entity(entity_id="P-N", name="Wei Ling Goh", entity_type="individual", country="Singapore"),
 }
 
 RELATIONSHIPS = [
@@ -74,12 +99,17 @@ RELATIONSHIPS = [
     Relationship(src="P-X", tgt="E-B", relationship_type="director_of", confidence=0.86, source="Corporate registry (synthetic)"),
     Relationship(src="E-C", tgt="E-B", relationship_type="beneficial_owner_of", confidence=0.74, source="UBO filing (synthetic, unverified)"),
     Relationship(src="P-Y", tgt="E-C", relationship_type="director_of", confidence=0.95, source="Corporate registry (synthetic)"),
+    # No shared directors on the C-1004 corridor — deliberately isolated so
+    # entity_agent contributes NONE, keeping the RBA demo clean (see C-1004).
+    Relationship(src="P-M", tgt="E-M", relationship_type="director_of", confidence=0.99, source="Corporate registry (synthetic)"),
+    Relationship(src="P-N", tgt="E-N", relationship_type="director_of", confidence=0.97, source="Corporate registry (synthetic)"),
 ]
 
 DOCUMENTS = {
     "TX-84721": Document(transaction_id="TX-84721", doc_type="invoice", narrative="General consulting services", amount=48_000_000),
     "TX-90233": Document(transaction_id="TX-90233", doc_type="invoice", narrative="Commodity handling split billing", amount=995_000),
     "TX-77310": Document(transaction_id="TX-77310", doc_type="invoice", narrative="Freight forwarding Q3 lane SG BOM itemised", amount=1_600_000),
+    "TX-31204": Document(transaction_id="TX-31204", doc_type="invoice", narrative="Bullion consignment settlement per supply contract, itemised assay certificate attached", amount=3_100_000),
 }
 
 TRANSACTIONS = {
@@ -98,6 +128,11 @@ TRANSACTIONS = {
                             beneficiary_id="E-C", beneficiary_registered="2023-09-15",
                             timestamp="2025-08-01T11:12:00+05:30", purpose="Freight forwarding",
                             route=["India", "Singapore"], scenario_type="normal"),
+    "TX-31204": Transaction(transaction_id="TX-31204", customer_id="C-1004", amount=3_100_000,
+                            source_country="India", destination_country="Singapore", ultimate_destination="Singapore",
+                            beneficiary_id="E-N", beneficiary_registered="2017-02-10",
+                            timestamp="2025-08-10T14:20:00+05:30", purpose="Bullion trade settlement",
+                            route=["India", "Singapore"], scenario_type="customer_risk_only"),
 }
 
 
@@ -144,6 +179,13 @@ def generate_bulk(n_normal: int = 800, n_anomalous: int = 200, seed: int = 7) ->
     customers, history, entities, relationships, documents, transactions = {}, {}, {}, {}, {}, {}
     base = datetime(2025, 8, 1)
 
+    # ~5% of customers carry an elevated/high persistent risk rating,
+    # independent of scenario_type — a Risk-Based Approach means the customer
+    # dimension is orthogonal to any single transaction's own behaviour, so
+    # this must not correlate with which scenario a customer was assigned.
+    def sample_risk_profile() -> str:
+        return rng.choices(["standard", "elevated", "high"], weights=[95, 3, 2])[0]
+
     def add_customer(i: int, baseline: int, n_hist: int = 7, spacing_days: int = 30):
         cid = f"G-{1000 + i}"
         sender_eid = f"GS-{i}"
@@ -156,7 +198,8 @@ def generate_bulk(n_normal: int = 800, n_anomalous: int = 200, seed: int = 7) ->
                                                    relationship_type="director_of", confidence=0.95,
                                                    source="synthetic")
         customers[cid] = Customer(customer_id=cid, name=f"SynthCorp {i}", country="India",
-                                  industry="general", onboarded="2021-01-01", entity_id=sender_eid)
+                                  industry="general", onboarded="2021-01-01", entity_id=sender_eid,
+                                  risk_profile=sample_risk_profile())
         history[cid] = [{"amount": int(baseline * rng.uniform(0.75, 1.25)),
                          "dest": "India", "date": (base - timedelta(days=spacing_days * k)).strftime("%Y-%m-%d")}
                         for k in range(1, n_hist + 1)]

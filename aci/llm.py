@@ -59,6 +59,7 @@ def template_narrative(txn, customer, results, risk) -> Narrative:
 
 def _build_packet(txn, customer, results, risk) -> dict:
     doc_findings = results.get("documentation")
+    kyc_findings = results.get("kyc")
     return {
         "transaction": {"id": txn.transaction_id, "customer": customer.name,
                         "amount_inr": txn.amount, "route": txn.route, "purpose": txn.purpose,
@@ -66,6 +67,7 @@ def _build_packet(txn, customer, results, risk) -> dict:
         "transaction_signals": [s.model_dump() for s in results["transaction"].signals],
         "entity_findings": [f.model_dump() for f in results["entity"].findings],
         "document_findings": [f.model_dump() for f in doc_findings.findings] if doc_findings else [],
+        "kyc_findings": [f.model_dump() for f in kyc_findings.findings] if kyc_findings else [],
         "regulatory_controls": [{"id": r.id, "title": r.title, "why": r.why}
                                 for r in results["regulatory"].regulatory],
         "risk": {"band": risk.band.value, "score": risk.score},

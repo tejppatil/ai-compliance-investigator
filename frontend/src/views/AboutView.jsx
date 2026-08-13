@@ -3,6 +3,8 @@ import { Card } from "../components.jsx";
 
 const CARDS = [
   { t: "AI investigates. Human decides.", b: "The system never freezes accounts, rejects customers, files reports, or declares fraud. Every case lands on a review screen where a qualified officer makes the call — and every action is logged." },
+  { t: "Two-person integrity control.", b: "Escalating a case assigns it to a named Senior Compliance Officer with an SLA. The tier-1 officer cannot then re-decide it — enforced by the API with a real 403, not just a disabled button — until the senior approves, overrides, or returns it for more evidence." },
+  { t: "Tamper-evident audit trail.", b: "Every audit entry is SHA-256 hash-chained to the one before it. Editing or reordering a past entry breaks every hash after it — checkable via a real verification endpoint, not just claimed." },
   { t: "Math is deterministic.", b: "Anomaly detection (median, ratios, velocity, thresholds) runs in Python. The LLM only interprets and narrates — it never computes the numbers or the risk score, and the system produces a complete, identical-scored case even with no LLM running at all." },
   { t: "Grounded, not guessed.", b: "Regulatory conclusions come from a retrieved, provenance-tagged knowledge base of real, publicly issued documents (RBI, IFSCA, CBUAE, MAS, FATF) — each with a checkable source link. Below a relevance floor, the answer is 'insufficient information', never an invented control." },
   { t: "Confidence ≠ risk.", b: "A HIGH risk band with 0.82 confidence means the evidence points to a high-priority investigation — not an 82% probability that fraud occurred." },

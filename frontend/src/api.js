@@ -22,18 +22,27 @@ export const api = {
   status: () => request("/api/status"),
   dashboard: () => request("/api/dashboard"),
   listTransactions: () => request("/api/transactions"),
+  listCustomers: () => request("/api/customers"),
   listInvestigations: () => request("/api/investigations"),
   createInvestigation: (transaction_id) =>
     request("/api/investigations", { method: "POST", body: JSON.stringify({ transaction_id }) }),
   getCase: (caseId) => request(`/api/investigations/${caseId}`),
   getAudit: (caseId) => request(`/api/audit/${caseId}`),
-  review: (caseId, decision, note, actor = "compliance.officer") =>
+  recentAudit: (limit = 8) => request(`/api/audit?limit=${limit}`),
+  review: (caseId, decision, note, { actor = "compliance.officer", role = "officer" } = {}) =>
     request(`/api/investigations/${caseId}/review`, {
       method: "POST",
-      body: JSON.stringify({ decision, note, actor }),
+      body: JSON.stringify({ decision, note, actor, role }),
     }),
   listRegulations: () => request("/api/regulations"),
   searchRegulations: (q, k = 5) => request(`/api/regulations/search?q=${encodeURIComponent(q)}&k=${k}`),
+  listEscalations: () => request("/api/escalations"),
+  networkInsights: () => request("/api/network-insights"),
+  riskMethodology: () => request("/api/risk-methodology"),
+  rules: () => request("/api/rules"),
+  verifyAudit: (caseId) => request(`/api/audit/${caseId}/verify`),
+  createTransaction: (payload) =>
+    request("/api/transactions", { method: "POST", body: JSON.stringify(payload) }),
 };
 
 export const caseIdFor = (transactionId) => `CASE-${transactionId.split("-").pop()}`;

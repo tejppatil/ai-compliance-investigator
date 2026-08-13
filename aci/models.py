@@ -206,3 +206,10 @@ class InvestigationCase(BaseModel):
     recommended_actions: list[str]
     audit: list[AuditEntry]
     created_at: datetime = Field(default_factory=utcnow)
+    # Two-tier escalation (§23-style Senior Compliance Officer review, see
+    # aci/orchestrator.py record_human_decision). 0 = never escalated,
+    # 1 = escalated and awaiting a senior decision, 2 = escalated and resolved.
+    escalation_level: int = 0
+    assigned_team: Optional[str] = None
+    assigned_to: Optional[str] = None
+    sla_due_at: Optional[datetime] = None

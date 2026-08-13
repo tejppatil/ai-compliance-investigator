@@ -38,7 +38,7 @@ At the default size (`--normal 4000 --anomalous 1000`):
 
 | File | Rows | Description |
 |---|---:|---|
-| `customers.csv` | 5,000 | Customer profiles, each linked to a corporate `entity_id` |
+| `customers.csv` | 5,000 | Customer profiles, each linked to a corporate `entity_id`; ~5% carry an `elevated`/`high` `risk_profile` (see below) |
 | `entities.csv` | 15,000 | Companies and individuals (directors, beneficial owners, counterparties) |
 | `relationships.csv` | 5,250 | Typed edges: `director_of`, `beneficial_owner_of`, with confidence + source |
 | `transactions.csv` | 5,000 | Cross-border transactions, labelled with `scenario_type` |
@@ -67,10 +67,17 @@ scored a meaningless F1 of 1.000. The `normal` population now includes:
 - ~8% of customers with a legitimate seasonal spike (1.3–1.7×, capped below
   the 1.8× anomaly threshold)
 - ~15% with a genuinely new but unremarkable counterparty
+- ~5% with an `elevated`/`high` persistent `risk_profile`, assigned
+  independently of `scenario_type` — a Risk-Based Approach means the
+  customer-risk dimension is orthogonal to any single transaction's own
+  behaviour, so this correctly also lands on some `normal` transactions
 
 This is what produces a realistic false-positive rate instead of a perfect
 score, and it is the point: an AML system's hard problem is false positives,
-so a dataset without near-misses cannot measure the thing that matters.
+so a dataset without near-misses cannot measure the thing that matters. The
+risk-profile noise specifically models a real trade-off: a system implementing
+FATF Recommendation 1 is *supposed* to flag more cases for a customer it
+already rates as higher-risk, even absent any other anomaly.
 
 ---
 
@@ -81,22 +88,24 @@ engine in this repository (`python run_demo.py --eval`), seed 7:
 
 | Metric | Value |
 |---|---|
-| Precision | 0.627 |
+| Precision | 0.569 |
 | Recall | 1.000 |
-| F1 | 0.771 |
-| False-positive rate | 0.148 |
-| True pos / False pos | 1,000 / 594 |
-| True neg / False neg | 3,406 / 0 |
-| Mean case time | 6.5 ms |
+| F1 | 0.726 |
+| False-positive rate | 0.189 |
+| True pos / False pos | 1,000 / 756 |
+| True neg / False neg | 3,244 / 0 |
+| Mean case time | 8.3 ms |
 
 Per-scenario detection is 1.000 for all eight anomalous scenarios; specificity
-on `normal` is 0.852.
+on `normal` is 0.811.
 
 **How to read this.** The engine is tuned for recall — in AML triage a missed
-case costs more than an extra review — so precision is the trade-off, and 594
+case costs more than an extra review — so precision is the trade-off, and 756
 false positives out of 4,000 normal transactions is the honest cost of that
-choice. These are not tuned-for-publication numbers; reproduce them with the
-command above.
+choice, part of which is the deliberate risk-profile noise described above:
+some `normal` transactions belong to a customer this system already rates as
+higher-risk, and it flags them for that reason alone. These are not
+tuned-for-publication numbers; reproduce them with the command above.
 
 ---
 

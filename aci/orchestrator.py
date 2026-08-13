@@ -7,10 +7,19 @@ autonomous agents. Each step writes to the audit trail. The pipeline stops at
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
+from aci import config
 from aci.agents import (compliance_agent, document_agent, entity_agent,
-                        investigation_agent, risk_agent, transaction_agent)
+                        investigation_agent, kyc_agent, risk_agent, transaction_agent)
 from aci.data.synthetic import World
-from aci.models import AuditEntry, InvestigationCase
+from aci.models import AuditEntry, InvestigationCase, utcnow
+
+ESCALATION_TEAM = "Escalation Team — Senior Compliance"
+ESCALATION_ASSIGNEE = "R. Menon, Senior Compliance Officer (MLRO)"
+
+TIER1_DECISIONS = {"close", "info", "edd", "escalate"}
+TIER2_DECISIONS = {"senior_close", "senior_override", "senior_return"}
 
 
 def investigate(transaction_id: str, world: World, use_ai_narrative: bool = True) -> InvestigationCase:
@@ -37,8 +46,11 @@ def investigate(transaction_id: str, world: World, use_ai_narrative: bool = True
     d = document_agent.run(case_id, txn, world)
     audit.append(AuditEntry(actor="system", action=f"Documentation check completed — severity {d.severity.value.upper()}"))
 
-    results = {"transaction": t, "entity": e, "regulatory": c, "documentation": d}
-    risk = risk_agent.run(case_id, txn, results)
+    k = kyc_agent.run(case_id, txn, world)
+    audit.append(AuditEntry(actor="system", action=f"KYC completeness check completed — {'complete' if k.extra.get('complete') else 'issue(s) found'}"))
+
+    results = {"transaction": t, "entity": e, "regulatory": c, "documentation": d, "kyc": k}
+    risk = risk_agent.run(case_id, txn, results, customer)
     audit.append(AuditEntry(actor="system", action=f"Risk engine aggregated findings — {risk.band.value.upper()} (score {risk.score:.2f}, confidence {risk.confidence:.2f})"))
 
     narrative, evidence, graph, unknowns, actions = investigation_agent.run(
@@ -48,15 +60,66 @@ def investigate(transaction_id: str, world: World, use_ai_narrative: bool = True
 
     return InvestigationCase(
         case_id=case_id, transaction_id=transaction_id, priority=risk.band,
-        transaction=txn, customer=customer, agent_results=[t, e, c, d],
+        transaction=txn, customer=customer, agent_results=[t, e, c, d, k],
         risk=risk, evidence=evidence, graph=graph, narrative=narrative,
         unknowns=unknowns, recommended_actions=actions, audit=audit,
     )
 
 
-def record_human_decision(case: InvestigationCase, actor: str, decision: str, note: str = "") -> InvestigationCase:
-    """The ONLY place a decision enters the system (§13)."""
+def record_human_decision(case: InvestigationCase, actor: str, decision: str,
+                          note: str = "", role: str = "officer") -> InvestigationCase:
+    """The ONLY place a decision enters the system (§13) — now a two-tier
+    control. Tier 1 (escalation_level 0): either persona can close, request
+    info, request EDD, or escalate to the named senior reviewer with an SLA.
+    Tier 2 (escalation_level 1, awaiting senior review): ONLY role="senior"
+    may decide — a tier-1 officer's attempt is rejected here, not just hidden
+    in the UI, so the two-person control is real rather than cosmetic."""
+    if case.escalation_level == 1:
+        if role != "senior":
+            raise PermissionError(
+                f"Case {case.case_id} is escalated to {case.assigned_to} — only the assigned "
+                "senior reviewer may decide it; a tier-1 officer cannot re-decide an escalated case.")
+        if decision not in TIER2_DECISIONS:
+            raise ValueError(f"Unknown senior decision '{decision}'; expected one of {sorted(TIER2_DECISIONS)}.")
+
+        if decision == "senior_return":
+            action = f"Senior Compliance Officer returned case for further evidence — note: \"{note}\"" if note else \
+                "Senior Compliance Officer returned case for further evidence."
+            case.escalation_level = 0
+            case.status = "pending_human_review"
+            case.assigned_team = None
+            case.assigned_to = None
+            case.sla_due_at = None
+        else:
+            verb = "approved the AI risk assessment and closed" if decision == "senior_close" else \
+                   "OVERRODE the AI risk assessment and closed"
+            action = f"Senior Compliance Officer {verb} the case" + (f' — note: "{note}"' if note else "")
+            case.status = "closed"
+            # 2, not 1: "resolved" is distinct from "awaiting" so the
+            # Escalation Queue (db.list_escalations filters level == 1) stops
+            # showing a case the moment the senior actually decides it.
+            case.escalation_level = 2
+        case.audit.append(AuditEntry(actor="human", action=action,
+                                     details={"decision": decision, "note": note, "role": "senior"}))
+        return case
+
+    if decision not in TIER1_DECISIONS:
+        raise ValueError(f"Unknown decision '{decision}'; expected one of {sorted(TIER1_DECISIONS)}.")
+
     action = f"Compliance officer decision: {decision}" + (f' — note: "{note}"' if note else "")
-    case.audit.append(AuditEntry(actor="human", action=action, details={"decision": decision, "note": note}))
-    case.status = {"close": "closed", "escalate": "escalated"}.get(decision, "in_review")
+    case.audit.append(AuditEntry(actor="human", action=action, details={"decision": decision, "note": note, "role": role}))
+
+    if decision == "escalate":
+        case.escalation_level = 1
+        case.status = "escalated"
+        case.assigned_team = ESCALATION_TEAM
+        case.assigned_to = ESCALATION_ASSIGNEE
+        case.sla_due_at = utcnow() + timedelta(hours=config.ESCALATION_SLA_HOURS)
+        case.audit.append(AuditEntry(
+            actor="system",
+            action=f"Case assigned to {ESCALATION_ASSIGNEE} — SLA due {case.sla_due_at.strftime('%Y-%m-%d %H:%M UTC')}",
+            details={"assigned_team": ESCALATION_TEAM, "assigned_to": ESCALATION_ASSIGNEE,
+                    "sla_due_at": case.sla_due_at.isoformat()}))
+    else:
+        case.status = {"close": "closed"}.get(decision, "in_review")
     return case

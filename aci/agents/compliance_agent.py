@@ -37,10 +37,17 @@ def run(case_id: str, txn, world: World, retriever: Retriever | None = None,
     t = transaction_result or transaction_agent.run(case_id, txn, world)
     signal_types = {s.type for s in t.signals}
     doc = world.doc(txn.transaction_id)
+    customer = world.customer(txn.customer_id)
 
     boost = {"cross-border", "kyc", "reporting"}
     query_terms = ["cross border transaction due diligence"]
     why_map: dict[str, str] = {}
+
+    if customer.risk_profile != "standard":
+        boost |= {"risk-based-approach", "edd"}
+        query_terms.append("risk based approach proportionate enhanced measures elevated risk customer")
+        why_map["FATF-R1"] = (f"Customer carries a '{customer.risk_profile}' risk rating; FATF R.1 requires "
+                              "proportionate enhanced measures for higher-risk customers.")
 
     if "amount_anomaly" in signal_types:
         boost |= {"high-value", "edd"}
@@ -68,7 +75,10 @@ def run(case_id: str, txn, world: World, retriever: Retriever | None = None,
     why_map.setdefault("FATF-R16", "Cross-border wire transfer — originator/beneficiary transparency requirement applies.")
 
     jurisdictions = _jurisdictions_for(txn)
-    hits = retriever.search(" ".join(query_terms), boost_tags=boost, k=5, jurisdictions=jurisdictions)
+    # k=6, not 5: with FATF-R1 added, a case with 5 other strongly-relevant
+    # hits could otherwise push the risk-based-approach citation out of the
+    # results entirely on an elevated/high-risk customer.
+    hits = retriever.search(" ".join(query_terms), boost_tags=boost, k=6, jurisdictions=jurisdictions)
     for h in hits:
         h.why = why_map.get(h.id, "Retrieved as relevant to this transaction's attributes.")
 

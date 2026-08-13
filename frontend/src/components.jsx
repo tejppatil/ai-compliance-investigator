@@ -1,4 +1,5 @@
 import React from "react";
+import { PERSONAS, usePersona } from "./persona.jsx";
 
 const SEV_CLASS = { high: "pill-high", medium: "pill-med", low: "pill-ok", none: "pill-none" };
 const SEV_LABEL = { high: "HIGH", medium: "MEDIUM", low: "LOW", none: "NONE" };
@@ -9,8 +10,44 @@ export function Pill({ sev, children }) {
   return <span className={`pill ${SEV_CLASS[s] || "pill-none"}`}>{children || SEV_LABEL[s] || sev}</span>;
 }
 
-export function Card({ children, style }) {
-  return <div className="card" style={style}>{children}</div>;
+// Recharts renders bars/slices via its own internal style resolution, which
+// doesn't reliably repaint an SVG `fill="var(--x)"` the way plain hand-written
+// SVG (e.g. EvidenceGraph below) does — bars silently paint with no visible
+// fill. Resolving the custom property to its actual computed color string
+// once (and again on theme toggle) sidesteps that without hardcoding colors
+// that would go stale if the palette in theme.css changes.
+export function useThemeColors(names) {
+  const [colors, setColors] = React.useState({});
+  React.useEffect(() => {
+    const resolve = () => {
+      const style = getComputedStyle(document.documentElement);
+      setColors(Object.fromEntries(names.map((n) => [n, style.getPropertyValue(`--${n}`).trim()])));
+    };
+    resolve();
+    const observer = new MutationObserver(resolve);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [names.join(",")]);
+  return colors;
+}
+
+export function Card({ children, style, className }) {
+  return <div className={className ? `card ${className}` : "card"} style={style}>{children}</div>;
+}
+
+// Grows from 0 to its target width on mount instead of appearing already at
+// full size — a CSS transition alone won't animate if the target width is
+// present on the very first paint, so this renders at 0 first and applies
+// the real width one tick later.
+export function AnimatedBar({ pct, color, height = 6 }) {
+  const [width, setWidth] = React.useState(0);
+  React.useEffect(() => { const t = requestAnimationFrame(() => setWidth(pct)); return () => cancelAnimationFrame(t); }, [pct]);
+  return (
+    <div style={{ height, background: "var(--raised)", borderRadius: height / 2, overflow: "hidden" }}>
+      <div style={{ width: `${width}%`, height: "100%", background: color, opacity: 0.85, transition: "width .7s cubic-bezier(.22,1,.36,1)" }} />
+    </div>
+  );
 }
 
 export function Eyebrow({ children, right }) {
@@ -50,6 +87,10 @@ export function Sidebar({ view, setView }) {
   const items = [
     { k: "dashboard", label: "Dashboard", icon: "▦" },
     { k: "queue", label: "Case queue", icon: "▣" },
+    { k: "new-transaction", label: "New transaction", icon: "✚" },
+    { k: "escalations", label: "Escalation queue", icon: "▲" },
+    { k: "how-it-works", label: "How it works", icon: "➜" },
+    { k: "rules", label: "Detection rules", icon: "☰" },
     { k: "regs", label: "Regulatory KB", icon: "▤" },
     { k: "about", label: "About & guardrails", icon: "◈" },
   ];
@@ -91,11 +132,64 @@ export function TopBar({ title, subtitle }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         {subtitle && <span className="mono" style={{ fontSize: 11, color: "var(--faint)" }}>{subtitle}</span>}
         <ThemeToggle />
-        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 11px", background: "var(--raised)", borderRadius: 20, border: "1px solid var(--border)" }}>
-          <div style={{ width: 20, height: 20, borderRadius: 10, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>SC</div>
-          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>S. Compliance Officer</span>
-        </div>
+        <PersonaSwitcher />
       </div>
+    </div>
+  );
+}
+
+function PersonaSwitcher() {
+  const { persona, setPersonaId, logout } = usePersona();
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button onClick={() => setOpen((o) => !o)}
+        style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 10px 5px 5px", background: "var(--raised)",
+          borderRadius: 20, border: "1px solid var(--border)", cursor: "pointer" }}>
+        <div style={{ width: 22, height: 22, borderRadius: 11, background: persona.role === "senior" ? "#8b5cf6" : "var(--accent)",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+          {persona.initials}
+        </div>
+        <div style={{ textAlign: "left" }}>
+          <div style={{ fontSize: 11, color: "var(--text)", fontWeight: 600, lineHeight: 1.2 }}>{persona.name}</div>
+          <div className="mono" style={{ fontSize: 8.5, color: "var(--faint)", lineHeight: 1.2 }}>ACTING AS · {persona.role === "senior" ? "SENIOR" : "OFFICER"}</div>
+        </div>
+        <span style={{ color: "var(--faint)", fontSize: 9, marginLeft: 2 }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: 38, width: 240, background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.16)", padding: 6, zIndex: 50 }}>
+          <div style={{ fontSize: 9.5, color: "var(--faint)", padding: "5px 8px 3px" }}>DEMO PERSONA SWITCHER — not a login</div>
+          {Object.values(PERSONAS).map((p) => (
+            <button key={p.id} onClick={() => { setPersonaId(p.id); setOpen(false); }}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "8px", borderRadius: 7, border: "none",
+                background: p.id === persona.id ? "var(--raised)" : "transparent", cursor: "pointer", textAlign: "left" }}>
+              <div style={{ width: 22, height: 22, borderRadius: 11, background: p.role === "senior" ? "#8b5cf6" : "var(--accent)",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                {p.initials}
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "var(--text)", fontWeight: 600 }}>{p.name}</div>
+                <div style={{ fontSize: 10, color: "var(--muted)" }}>{p.title}</div>
+              </div>
+            </button>
+          ))}
+          <div style={{ fontSize: 9.5, color: "var(--faint)", padding: "6px 8px 6px", lineHeight: 1.4, borderTop: "1px solid var(--border)", marginTop: 4 }}>
+            The API enforces this server-side — a tier-1 officer decision on an already-escalated case gets a real 403, regardless of what this switcher claims.
+          </div>
+          <button onClick={() => { setOpen(false); logout(); }}
+            style={{ width: "100%", textAlign: "left", padding: "8px", borderRadius: 7, border: "none",
+              background: "transparent", cursor: "pointer", fontSize: 12, color: "var(--crit)", fontWeight: 600 }}>
+            ↩ Log out
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -120,9 +214,7 @@ export function RiskMeter({ risk }) {
               <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{r.label} <span className="mono" style={{ color: "var(--faint)", fontSize: 10 }}>· w{r.weight}</span></span>
               <span className="mono" style={{ fontSize: 10.5, color }}>{rsev.toUpperCase()}</span>
             </div>
-            <div style={{ height: 6, background: "var(--raised)", borderRadius: 3, overflow: "hidden" }}>
-              <div style={{ width: `${(SEV_SCORE[rsev] * 100).toFixed(0)}%`, height: "100%", background: color, opacity: 0.85 }} />
-            </div>
+            <AnimatedBar pct={SEV_SCORE[rsev] * 100} color={color} />
             {r.source_refs && r.source_refs.length > 0 &&
               <div className="mono" style={{ fontSize: 9.5, color: "var(--faint)", marginTop: 3 }}>from: {r.source_refs.join(", ")}</div>}
           </div>
@@ -133,9 +225,7 @@ export function RiskMeter({ risk }) {
           <span className="mono" style={{ fontSize: 11, color: "var(--accent)", letterSpacing: ".05em" }}>CONFIDENCE {risk.confidence.toFixed(2)}</span>
           <span style={{ fontSize: 10.5, color: "var(--faint)" }}>evidence quality — not a fraud probability</span>
         </div>
-        <div style={{ height: 6, background: "var(--raised)", borderRadius: 3, overflow: "hidden" }}>
-          <div style={{ width: `${(risk.confidence * 100).toFixed(0)}%`, height: "100%", background: "var(--accent)" }} />
-        </div>
+        <AnimatedBar pct={risk.confidence * 100} color="var(--accent)" />
       </div>
     </div>
   );
@@ -146,7 +236,32 @@ const AGENT_META = {
   entity_intelligence: { n: "Entity Intelligence", d: "Who is involved and how they connect" },
   compliance_intelligence: { n: "Compliance Intelligence · RAG", d: "Relevant controls, retrieved with provenance" },
   document_analysis: { n: "Document Analysis", d: "Invoice fields checked against the transaction" },
+  kyc_completeness: { n: "KYC Completeness", d: "Onboarding record consistency — a data-quality check, not a risk score" },
 };
+
+// Pipeline order the orchestrator always returns agent_results in
+// (aci/orchestrator.py: [t, e, c, d, k]) — used to render "not revealed yet"
+// placeholders during the staggered reveal in CaseView.
+export const AGENT_ORDER = ["transaction_intelligence", "entity_intelligence", "compliance_intelligence", "document_analysis", "kyc_completeness"];
+
+export function PendingAgentCard({ agentKey, active }) {
+  const m = AGENT_META[agentKey] || { n: agentKey, d: "" };
+  return (
+    <div style={{ display: "flex", gap: 14 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div className={active ? "pulse-dot" : undefined} style={{ width: 12, height: 12, borderRadius: 6,
+          background: active ? "var(--accent)" : "var(--border)", border: `2px solid ${active ? "var(--accent)" : "var(--border)"}`, marginTop: 4 }} />
+        <div style={{ flex: 1, width: 2, background: "var(--border)", marginTop: 4 }} />
+      </div>
+      <div style={{ flex: 1, paddingBottom: 18 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: active ? "var(--text)" : "var(--faint)" }}>{m.n}</div>
+        <div className={active ? "mono blink" : "mono"} style={{ fontSize: 11, color: active ? "var(--accent)" : "var(--faint)", marginTop: 2 }}>
+          {active ? "analysing…" : "queued"}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function AgentResultCard({ result }) {
   const m = AGENT_META[result.agent] || { n: result.agent, d: "" };
@@ -238,12 +353,12 @@ export function EvidenceGraph({ graph }) {
           </g>
         );
       })}
-      {graph.nodes.map((n) => {
+      {graph.nodes.map((n, i) => {
         const p = positions[n.id];
         if (!p) return null;
         const w = 132, h = 40;
         return (
-          <g key={n.id}>
+          <g key={n.id} className="svg-node-in" style={{ animationDelay: `${i * 90}ms` }}>
             <rect x={p.x - w / 2} y={p.y - h / 2} width={w} height={h} rx={8}
               fill="var(--sunken)" stroke={KIND_COLOR[n.kind] || "var(--border)"} strokeWidth={1.2} />
             <circle cx={p.x - w / 2 + 12} cy={p.y} r={3.5} fill={KIND_COLOR[n.kind] || "var(--faint)"} />

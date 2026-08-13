@@ -178,4 +178,8 @@ textarea:focus, input[type="text"]:focus { outline: none; border-color: var(--ac
 .pulse-dot { animation: pulse 1.2s ease-in-out infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 .blink { animation: blink 1.1s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .pulse-dot, .blink { animation: none; } }
+@keyframes revealIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.reveal-in { animation: revealIn .4s ease both; }
+@keyframes nodeIn { from { opacity: 0; } to { opacity: 1; } }
+.svg-node-in { animation: nodeIn .45s ease both; }
+@media (prefers-reduced-motion: reduce) { .pulse-dot, .blink, .reveal-in, .svg-node-in { animation: none; } }

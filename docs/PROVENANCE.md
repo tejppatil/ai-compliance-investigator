@@ -50,6 +50,7 @@ a fabricated one.
 | `FATF-R10` | FATF Recommendation 10 — Customer Due Diligence | FATF | International | 2026-08-12 |
 | `FATF-R16` | FATF Recommendation 16 — Wire Transfers | FATF | International | 2026-08-12 |
 | `FATF-R24` | FATF Recommendation 24 — Beneficial Ownership of Legal Persons | FATF | International | 2026-08-12 |
+| `FATF-R1` | FATF Recommendation 1 — Assessing Risks and Applying a Risk-Based Approach | FATF | International | 2026-08-13, cross-checked against FATF/CFATF sources |
 
 **A note on verification method.** `rbi.org.in` and `ifsca.gov.in` were fetched
 directly. `centralbank.ae`, `mas.gov.sg` and `fatf-gafi.org` returned 403 or
@@ -57,7 +58,7 @@ service-unavailable responses to automated requests, so those entries were
 cross-checked against the regulators' own listing pages plus independent legal
 reporting. Every entry carries a `source_url` a reviewer can open and check.
 
-**What this is not.** Ten documents is a demonstration corpus for one corridor,
+**What this is not.** Eleven documents is a demonstration corpus for one corridor,
 not comprehensive regulatory coverage. Retrieval is filtered to the
 transaction's own jurisdictions; below a relevance floor the system returns
 *"Insufficient information in the configured regulatory knowledge base."*

@@ -161,4 +161,18 @@ KB: list[dict] = [
         "text": ("fatf recommendation beneficial ownership legal person transparency ownership chain "
                 "ultimate beneficial owner registry"),
     },
+    {
+        "id": "FATF-R1", "title": "FATF Recommendation 1 — Assessing Risks and Applying a Risk-Based Approach",
+        "regulator": "Financial Action Task Force (FATF)", "jurisdiction": "International",
+        "section": "Recommendation 1", "publication_date": "2012-02-16", "document_version": "as updated (2025 revision to R.1)",
+        "source_url": "https://www.fatf-gafi.org/en/topics/fatf-recommendations.html",
+        "verified": "2026-08-13 (title cross-checked against FATF and CFATF sources)",
+        "tags": ["any", "risk-based-approach"],
+        "summary": ("The foundational FATF standard: countries and financial institutions must identify, "
+                    "assess and understand their money-laundering/terrorist-financing risks, and apply "
+                    "resources and controls proportionate to those risks — the basis for weighting customer, "
+                    "product, geographic and transaction risk rather than applying uniform controls to everyone."),
+        "text": ("fatf recommendation risk based approach assess understand mitigate money laundering "
+                "terrorist financing risk proportionate customer risk rating"),
+    },
 ]
