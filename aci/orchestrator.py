@@ -11,7 +11,8 @@ from datetime import timedelta
 
 from aci import config
 from aci.agents import (compliance_agent, document_agent, entity_agent,
-                        investigation_agent, kyc_agent, risk_agent, transaction_agent)
+                        investigation_agent, kyc_agent, risk_agent, sanctions_agent,
+                        transaction_agent)
 from aci.data.synthetic import World
 from aci.models import AuditEntry, InvestigationCase, utcnow
 
@@ -40,7 +41,12 @@ def investigate(transaction_id: str, world: World, use_ai_narrative: bool = True
     e = entity_agent.run(case_id, txn, world)
     audit.append(AuditEntry(actor="system", action=f"Entity Intelligence completed — {len(e.findings)} relationship finding(s)"))
 
-    c = compliance_agent.run(case_id, txn, world, transaction_result=t)
+    # After Entity Intelligence (so related parties it surfaced get screened
+    # too) and before Compliance RAG (so retrieval can react to a hit).
+    s = sanctions_agent.run(case_id, txn, world, entity_result=e)
+    _sanctions_audit(audit, s)
+
+    c = compliance_agent.run(case_id, txn, world, transaction_result=t, sanctions_result=s)
     audit.append(AuditEntry(actor="system", action=f"Compliance RAG retrieved {len(c.regulatory)} control(s) with provenance"))
 
     d = document_agent.run(case_id, txn, world)
@@ -49,9 +55,10 @@ def investigate(transaction_id: str, world: World, use_ai_narrative: bool = True
     k = kyc_agent.run(case_id, txn, world)
     audit.append(AuditEntry(actor="system", action=f"KYC completeness check completed — {'complete' if k.extra.get('complete') else 'issue(s) found'}"))
 
-    results = {"transaction": t, "entity": e, "regulatory": c, "documentation": d, "kyc": k}
+    results = {"transaction": t, "entity": e, "regulatory": c, "documentation": d, "kyc": k, "sanctions": s}
     risk = risk_agent.run(case_id, txn, results, customer)
-    audit.append(AuditEntry(actor="system", action=f"Risk engine aggregated findings — {risk.band.value.upper()} (score {risk.score:.2f}, confidence {risk.confidence:.2f})"))
+    floor_note = f" — RAISED to {risk.band.value.upper()} by sanctions floor" if risk.sanctions_floor_applied else ""
+    audit.append(AuditEntry(actor="system", action=f"Risk engine aggregated findings — {risk.band.value.upper()} (score {risk.score:.2f}, confidence {risk.confidence:.2f}){floor_note}"))
 
     narrative, evidence, graph, unknowns, actions = investigation_agent.run(
         txn, world, results, risk, use_ai_narrative=use_ai_narrative)
@@ -60,10 +67,30 @@ def investigate(transaction_id: str, world: World, use_ai_narrative: bool = True
 
     return InvestigationCase(
         case_id=case_id, transaction_id=transaction_id, priority=risk.band,
-        transaction=txn, customer=customer, agent_results=[t, e, c, d, k],
+        transaction=txn, customer=customer, agent_results=[t, e, s, c, d, k],
         risk=risk, evidence=evidence, graph=graph, narrative=narrative,
         unknowns=unknowns, recommended_actions=actions, audit=audit,
+        sanctions_status=s.extra.get("confirmed_hit") and "hit"
+                        or (s.extra.get("possible_match") and "possible" or "clear"),
     )
+
+
+def _sanctions_audit(audit: list[AuditEntry], s) -> None:
+    """A screening result is audit-worthy whichever way it goes: a clear is a
+    positive assertion that screening ran and found nothing, which is exactly
+    what an auditor needs to see later. Recording only hits would leave "was
+    this even screened?" unanswerable."""
+    if s.extra.get("confirmed_hit"):
+        names = "; ".join(f.description.split(":", 1)[1].strip() for f in s.findings if f.type == "sanctions_hit")
+        action = f"Sanctions screening: CONFIRMED MATCH — {names}"
+    elif s.extra.get("possible_match"):
+        action = f"Sanctions screening: {len(s.findings)} possible match(es) below the confirmed threshold — human confirmation required"
+    else:
+        action = f"Sanctions screening: no match — {s.extra.get('subject_count', 0)} subject(s) screened against {len(s.extra.get('lists_screened', []))} list(s)"
+    audit.append(AuditEntry(actor="system", action=action,
+                            details={"confirmed_hit": bool(s.extra.get("confirmed_hit")),
+                                    "possible_match": bool(s.extra.get("possible_match")),
+                                    "screened": s.extra.get("screened", [])}))
 
 
 def record_human_decision(case: InvestigationCase, actor: str, decision: str,

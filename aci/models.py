@@ -173,6 +173,12 @@ class RiskAssessment(BaseModel):
     score: float
     band: Severity
     confidence: float
+    # Set when a sanctions match forced the band above what the weighted rows
+    # alone produce (aci/agents/risk_agent.py explains why screening is a floor
+    # rather than a seventh weighted dimension). Holds the human-readable
+    # reason so the UI never shows a band the rows can't account for without
+    # saying why.
+    sanctions_floor_applied: Optional[str] = None
 
 
 class Narrative(BaseModel):
@@ -213,3 +219,8 @@ class InvestigationCase(BaseModel):
     assigned_team: Optional[str] = None
     assigned_to: Optional[str] = None
     sla_due_at: Optional[datetime] = None
+    # "hit" | "possible" | "clear" — denormalised out of agent_results onto the
+    # case so the triage queue and escalation views can filter/rank on it
+    # without deserialising every case's full JSON blob (same reason
+    # escalation_level is a real column in db/schema.sql).
+    sanctions_status: str = "clear"

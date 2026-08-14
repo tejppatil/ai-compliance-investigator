@@ -29,10 +29,13 @@ def _jurisdictions_for(txn) -> set[str]:
 
 
 def run(case_id: str, txn, world: World, retriever: Retriever | None = None,
-        transaction_result: AgentResult | None = None) -> AgentResult:
+        transaction_result: AgentResult | None = None,
+        sanctions_result: AgentResult | None = None) -> AgentResult:
     """`transaction_result` lets the orchestrator pass in the Transaction
     Intelligence output it already computed — recomputing the same
-    deterministic statistics a second time on every case is wasted work."""
+    deterministic statistics a second time on every case is wasted work.
+    `sanctions_result` lets retrieval react to a watchlist match, which
+    changes which controls are actually relevant."""
     retriever = retriever or _RETRIEVER
     t = transaction_result or transaction_agent.run(case_id, txn, world)
     signal_types = {s.type for s in t.signals}
@@ -42,6 +45,15 @@ def run(case_id: str, txn, world: World, retriever: Retriever | None = None,
     boost = {"cross-border", "kyc", "reporting"}
     query_terms = ["cross border transaction due diligence"]
     why_map: dict[str, str] = {}
+
+    sanctions_flagged = bool(sanctions_result and sanctions_result.findings)
+    if sanctions_flagged:
+        confirmed = sanctions_result.extra.get("confirmed_hit")
+        boost |= {"sanctions", "edd", "risk-based-approach"}
+        query_terms.append("targeted financial sanctions designated person freeze reporting obligation")
+        why_map["FATF-R1"] = (
+            f"A {'confirmed' if confirmed else 'possible'} watchlist match was returned for a party to this "
+            "transaction; FATF R.1 requires measures proportionate to the identified risk.")
 
     if customer.risk_profile != "standard":
         boost |= {"risk-based-approach", "edd"}

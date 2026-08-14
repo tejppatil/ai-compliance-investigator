@@ -275,15 +275,17 @@ export function RiskMeter({ risk }) {
 const AGENT_META = {
   transaction_intelligence: { n: "Transaction Intelligence", d: "Statistical behaviour vs the customer's own history" },
   entity_intelligence: { n: "Entity Intelligence", d: "Who is involved and how they connect" },
+  sanctions_screening: { n: "Sanctions Screening", d: "Counterparty and related parties vs a bundled synthetic watchlist" },
   compliance_intelligence: { n: "Compliance Intelligence · RAG", d: "Relevant controls, retrieved with provenance" },
   document_analysis: { n: "Document Analysis", d: "Invoice fields checked against the transaction" },
   kyc_completeness: { n: "KYC Completeness", d: "Onboarding record consistency — a data-quality check, not a risk score" },
 };
 
 // Pipeline order the orchestrator always returns agent_results in
-// (aci/orchestrator.py: [t, e, c, d, k]) — used to render "not revealed yet"
+// (aci/orchestrator.py: [t, e, s, c, d, k]) — used to render "not revealed yet"
 // placeholders during the staggered reveal in CaseView.
-export const AGENT_ORDER = ["transaction_intelligence", "entity_intelligence", "compliance_intelligence", "document_analysis", "kyc_completeness"];
+export const AGENT_ORDER = ["transaction_intelligence", "entity_intelligence", "sanctions_screening",
+                            "compliance_intelligence", "document_analysis", "kyc_completeness"];
 
 export function PendingAgentCard({ agentKey, active }) {
   const m = AGENT_META[agentKey] || { n: agentKey, d: "" };

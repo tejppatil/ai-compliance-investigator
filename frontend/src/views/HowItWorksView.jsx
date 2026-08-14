@@ -9,6 +9,8 @@ const STAGES = [
     description: "Median, ratio, velocity, structuring — pure statistics, no LLM.", file: "aci/agents/transaction_agent.py" },
   { key: "entity", label: "Entity Intelligence", status: "done",
     description: "Shared directors, beneficial-owner chains.", file: "aci/agents/entity_agent.py" },
+  { key: "sanctions", label: "Sanctions Screening", status: "done",
+    description: "Counterparty + related parties vs a bundled synthetic watchlist. A confirmed match floors the risk band.", file: "aci/agents/sanctions_agent.py" },
   { key: "compliance", label: "Compliance RAG", status: "done",
     description: "Retrieves applicable regulation, jurisdiction-filtered.", file: "aci/agents/compliance_agent.py" },
   { key: "document", label: "Document Analysis", status: "done",

@@ -87,6 +87,21 @@ ENTITIES = {
                   country="India", registered="2020-06-15", directors=["P-M"]),
     "E-N": Entity(entity_id="E-N", name="Straits Precious Metals Pte Ltd", entity_type="company",
                   country="Singapore", registered="2017-02-10", directors=["P-N"]),
+    # ── Sanctions-screening demo pair (aci/agents/sanctions_agent.py) ──────
+    # E-S deliberately matches SCDL-0001 in the FABRICATED watchlist
+    # (aci/data/synthetic_watchlist.py) on a plural variant — 0.98 similarity,
+    # above the confirmed threshold. E-T is the control: it shares the
+    # non-distinctive tokens but not the distinctive one, scoring 0.80, below
+    # even the "possible match" floor, so it must produce NO finding at all.
+    # Both are needed — a screening demo with only a hit proves nothing about
+    # false positives, which is the failure mode that actually sinks screening
+    # systems in production.
+    "E-S": Entity(entity_id="E-S", name="Zarnex Petrochemicals Trading FZCO", entity_type="company",
+                  country="UAE", registered="2021-08-30", directors=["P-W"]),
+    "E-T": Entity(entity_id="E-T", name="Zenith Petrochemical Trading FZCO", entity_type="company",
+                  country="UAE", registered="2019-05-12", directors=["P-V"]),
+    "P-W": Entity(entity_id="P-W", name="Faisal Al-Mansoori", entity_type="individual", country="UAE"),
+    "P-V": Entity(entity_id="P-V", name="Imran Qureshi", entity_type="individual", country="UAE"),
     "P-X": Entity(entity_id="P-X", name="Rajiv Menon", entity_type="individual", country="India"),
     "P-Y": Entity(entity_id="P-Y", name="Lian Tan", entity_type="individual", country="Singapore"),
     "P-Z": Entity(entity_id="P-Z", name="Ananya Krishnan", entity_type="individual", country="India"),
@@ -103,6 +118,8 @@ RELATIONSHIPS = [
     # entity_agent contributes NONE, keeping the RBA demo clean (see C-1004).
     Relationship(src="P-M", tgt="E-M", relationship_type="director_of", confidence=0.99, source="Corporate registry (synthetic)"),
     Relationship(src="P-N", tgt="E-N", relationship_type="director_of", confidence=0.97, source="Corporate registry (synthetic)"),
+    Relationship(src="P-W", tgt="E-S", relationship_type="director_of", confidence=0.93, source="Corporate registry (synthetic)"),
+    Relationship(src="P-V", tgt="E-T", relationship_type="director_of", confidence=0.91, source="Corporate registry (synthetic)"),
 ]
 
 DOCUMENTS = {
@@ -110,6 +127,8 @@ DOCUMENTS = {
     "TX-90233": Document(transaction_id="TX-90233", doc_type="invoice", narrative="Commodity handling split billing", amount=995_000),
     "TX-77310": Document(transaction_id="TX-77310", doc_type="invoice", narrative="Freight forwarding Q3 lane SG BOM itemised", amount=1_600_000),
     "TX-31204": Document(transaction_id="TX-31204", doc_type="invoice", narrative="Bullion consignment settlement per supply contract, itemised assay certificate attached", amount=3_100_000),
+    "TX-66150": Document(transaction_id="TX-66150", doc_type="invoice", narrative="Petrochemical feedstock supply against framework agreement, lot schedule attached", amount=4_200_000),
+    "TX-66151": Document(transaction_id="TX-66151", doc_type="invoice", narrative="Petrochemical feedstock supply against framework agreement, lot schedule attached", amount=4_150_000),
 }
 
 TRANSACTIONS = {
@@ -133,6 +152,21 @@ TRANSACTIONS = {
                             beneficiary_id="E-N", beneficiary_registered="2017-02-10",
                             timestamp="2025-08-10T14:20:00+05:30", purpose="Bullion trade settlement",
                             route=["India", "Singapore"], scenario_type="customer_risk_only"),
+    # ── The sanctions-screening pair. Everything except the beneficiary is
+    # held as close to identical as possible between these two, so the ONLY
+    # thing that differs in the resulting cases is the screening outcome —
+    # which is what makes the near-miss control meaningful rather than
+    # decorative.
+    "TX-66150": Transaction(transaction_id="TX-66150", customer_id="C-1002", amount=4_200_000,
+                            source_country="India", destination_country="UAE", ultimate_destination="UAE",
+                            beneficiary_id="E-S", beneficiary_registered="2021-08-30",
+                            timestamp="2025-08-09T10:05:00+05:30", purpose="Petrochemical feedstock",
+                            route=["India", "UAE"], scenario_type="sanctions_hit"),
+    "TX-66151": Transaction(transaction_id="TX-66151", customer_id="C-1002", amount=4_150_000,
+                            source_country="India", destination_country="UAE", ultimate_destination="UAE",
+                            beneficiary_id="E-T", beneficiary_registered="2019-05-12",
+                            timestamp="2025-08-09T10:12:00+05:30", purpose="Petrochemical feedstock",
+                            route=["India", "UAE"], scenario_type="sanctions_near_miss"),
 }
 
 

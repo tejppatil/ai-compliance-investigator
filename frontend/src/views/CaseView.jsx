@@ -5,9 +5,11 @@ import { usePersona } from "../persona.jsx";
 import { ErrorBanner } from "./DashboardView.jsx";
 import InvestigationTimeline from "../components/InvestigationTimeline.jsx";
 import PipelineFlow from "../components/PipelineFlow.jsx";
+import SanctionsPanel from "../components/SanctionsPanel.jsx";
 
 const STAGE_LABELS = {
   transaction_intelligence: "Transaction Intel", entity_intelligence: "Entity Intel",
+  sanctions_screening: "Sanctions Screening",
   compliance_intelligence: "Compliance RAG", document_analysis: "Document Analysis",
   kyc_completeness: "KYC Completeness",
 };
@@ -158,6 +160,17 @@ export default function CaseView({ transactionId }) {
               <PipelineFlow stages={buildLiveStages(caseData, revealCount)} dense />
             </div>
           </Card>
+        )}
+
+        {/* Sits directly under the pipeline, above everything else, and only
+            once the reveal has passed the screening stage — a match is the
+            one finding that shouldn't have to be scrolled to. */}
+        {caseData && revealCount > caseData.agent_results.findIndex((r) => r.dimension === "sanctions") && (
+          <SanctionsPanel
+            result={caseData.agent_results.find((r) => r.dimension === "sanctions")}
+            status={caseData.sanctions_status}
+            floorReason={caseData.risk.sanctions_floor_applied}
+          />
         )}
 
         {caseData && (

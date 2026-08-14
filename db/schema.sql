@@ -30,7 +30,10 @@ CREATE TABLE IF NOT EXISTS investigation_case (
     -- database that predates this addition.
     escalation_level   INTEGER NOT NULL DEFAULT 0,
     assigned_to        TEXT,
-    sla_due_at         TEXT
+    sla_due_at         TEXT,
+    -- 'hit' | 'possible' | 'clear'. Denormalised from case_json so the triage
+    -- queue can rank on a sanctions match without deserialising every case.
+    sanctions_status   TEXT NOT NULL DEFAULT 'clear'
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
