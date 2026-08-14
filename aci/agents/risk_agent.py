@@ -51,7 +51,28 @@ def run(case_id: str, txn, results: dict[str, AgentResult], customer=None) -> Ri
     """`customer` grounds the customer_risk dimension in the Risk-Based
     Approach (§ FATF R.1) — a persistent customer risk rating, not just this
     transaction's own behaviour. Optional only so existing direct callers
-    (e.g. ad-hoc tests) don't break; the orchestrator always passes it."""
+    (e.g. ad-hoc tests) don't break; the orchestrator always passes it.
+
+    SANCTIONS IS A FLOOR, NOT A WEIGHTED DIMENSION — the deliberate design
+    decision here, in the same spirit as keeping KYC completeness out of the
+    score entirely (see aci/agents/kyc_agent.py):
+
+    A weighted seventh dimension would be wrong. At any defensible weight
+    (~0.15), a confirmed watchlist match on an otherwise-clean transaction
+    would land around 0.15 and band LOW — the arithmetic would quietly bury
+    the single most consequential finding the system can produce. Averaging
+    is the right model for "how unusual is this?", and the wrong model for
+    "is this party prohibited?", which is categorical and legal rather than
+    statistical.
+
+    So a confirmed hit sets a HIGH floor: the weighted score is still
+    computed and still shown in full (nothing is hidden from the officer),
+    but the band cannot come out below HIGH. A *possible* match — below the
+    confirmed threshold — only floors at MEDIUM, because forcing HIGH on a
+    fuzzy name collision would make the alarm meaningless through overuse.
+    Both are recorded on the assessment (`sanctions_floor_applied`) so the UI
+    can say the band was raised rather than silently showing a number the
+    rows don't add up to."""
     risk_profile = customer.risk_profile if customer else "standard"
     sev_by_dim = {
         "transaction": results["transaction"].severity,
@@ -80,4 +101,20 @@ def run(case_id: str, txn, results: dict[str, AgentResult], customer=None) -> Ri
         confs.append(0.86)
     confidence = round(sum(confs) / len(confs), 2) if confs else 0.5
 
-    return RiskAssessment(rows=rows, score=score, band=band_from_score(score), confidence=confidence)
+    band = band_from_score(score)
+    sanctions = results.get("sanctions")
+    floor_reason = None
+    if sanctions:
+        if sanctions.extra.get("confirmed_hit") and SEVERITY_SCORE[band] < SEVERITY_SCORE[Severity.HIGH]:
+            band, floor_reason = Severity.HIGH, (
+                "Band raised to HIGH by the sanctions floor: a confirmed watchlist match is a "
+                "categorical finding, not a weighted contribution. The computed score "
+                f"({score:.2f}) is shown unchanged above.")
+        elif sanctions.extra.get("possible_match") and SEVERITY_SCORE[band] < SEVERITY_SCORE[Severity.MEDIUM]:
+            band, floor_reason = Severity.MEDIUM, (
+                "Band raised to MEDIUM by the sanctions floor: a possible watchlist match below the "
+                "confirmed threshold requires human adjudication. The computed score "
+                f"({score:.2f}) is shown unchanged above.")
+
+    return RiskAssessment(rows=rows, score=score, band=band, confidence=confidence,
+                          sanctions_floor_applied=floor_reason)

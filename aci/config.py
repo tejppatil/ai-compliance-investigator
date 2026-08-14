@@ -52,6 +52,32 @@ CUSTOMER_RISK_SEVERITY = {
 # SLA; only that role may then decide the case (aci/orchestrator.py).
 ESCALATION_SLA_HOURS = 24
 
+# ── Sanctions / watchlist screening (aci/agents/sanctions_agent.py) ─────────
+# Screening runs against a FABRICATED list (aci/data/synthetic_watchlist.py) —
+# no real sanctions data is embedded anywhere in this project.
+#
+# Two thresholds, because "confirmed hit" and "needs a human to look" are
+# genuinely different outcomes and collapsing them into one number is how
+# screening systems become either useless (too many false hits) or dangerous
+# (missed true hits):
+#   >= SANCTIONS_MATCH_CONFIRMED : treated as a confirmed hit
+#   >= SANCTIONS_MATCH_POSSIBLE  : surfaced as a possible match for human review
+#   <  SANCTIONS_MATCH_POSSIBLE  : not reported
+# Values are calibrated against the demo data (see tests/test_sanctions.py,
+# which asserts both the true-hit and the deliberate near-miss), not guessed.
+SANCTIONS_MATCH_CONFIRMED = 0.93
+SANCTIONS_MATCH_POSSIBLE = 0.86
+
+# Corporate suffixes carry no identifying information — "Ltd" appears in
+# thousands of unrelated names — so they're stripped before comparison. Left
+# in, two unrelated "... Trading FZCO" companies score misleadingly similar.
+SANCTIONS_IGNORED_TOKENS = {
+    "ltd", "limited", "llc", "llp", "plc", "inc", "incorporated", "corp", "corporation",
+    "co", "company", "pvt", "private", "pte", "gmbh", "ag", "sa", "nv", "bv", "ooo", "oao",
+    "fzco", "fze", "fzc", "dmcc", "holdings", "holding", "group", "international", "intl",
+    "trading", "general", "enterprises", "enterprise", "services", "service", "and", "the",
+}
+
 # Risk band -> RECOMMENDED action, surfaced on the Risk-Based Approach page
 # and via GET /api/risk-methodology. These are recommendations for the human
 # reviewer, never an automated action — the system never freezes, blocks, or

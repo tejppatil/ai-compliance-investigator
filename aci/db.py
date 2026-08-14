@@ -38,6 +38,10 @@ _MIGRATED_COLUMNS = {
         ("escalation_level", "INTEGER NOT NULL DEFAULT 0"),
         ("assigned_to", "TEXT"),
         ("sla_due_at", "TEXT"),
+        # Denormalised from the case JSON for the same reason as
+        # escalation_level: the triage queue ranks on it, and deserialising
+        # every case's full blob to sort a list would be absurd.
+        ("sanctions_status", "TEXT NOT NULL DEFAULT 'clear'"),
     ],
     "audit_log": [
         ("prev_hash", "TEXT"),
@@ -110,17 +114,19 @@ def save_case(case: InvestigationCase, db_path: Path | None = None) -> None:
         conn.execute(
             """INSERT INTO investigation_case
                  (case_id, transaction_id, priority, status, created_at, updated_at, case_json,
-                  escalation_level, assigned_to, sla_due_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  escalation_level, assigned_to, sla_due_at, sanctions_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(case_id) DO UPDATE SET
                  status = excluded.status, priority = excluded.priority,
                  updated_at = excluded.updated_at, case_json = excluded.case_json,
                  escalation_level = excluded.escalation_level,
-                 assigned_to = excluded.assigned_to, sla_due_at = excluded.sla_due_at""",
+                 assigned_to = excluded.assigned_to, sla_due_at = excluded.sla_due_at,
+                 sanctions_status = excluded.sanctions_status""",
             (case.case_id, case.transaction_id, case.priority.value, case.status,
              case.created_at.isoformat(), case.created_at.isoformat(), case_json,
              case.escalation_level, case.assigned_to,
-             case.sla_due_at.isoformat() if case.sla_due_at else None),
+             case.sla_due_at.isoformat() if case.sla_due_at else None,
+             case.sanctions_status),
         )
         already = {row["ts"] + row["actor"] + row["action"] for row in
                    conn.execute("SELECT ts, actor, action FROM audit_log WHERE case_id = ?", (case.case_id,))}
@@ -153,7 +159,8 @@ def list_cases(db_path: Path | None = None) -> list[dict]:
     the full JSON blob for every row just to list them."""
     with _cursor(db_path) as conn:
         rows = conn.execute(
-            "SELECT case_id, transaction_id, priority, status, created_at FROM investigation_case ORDER BY created_at DESC"
+            "SELECT case_id, transaction_id, priority, status, created_at, escalation_level, "
+            "sla_due_at, sanctions_status FROM investigation_case ORDER BY created_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
 

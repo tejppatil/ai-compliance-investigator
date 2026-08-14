@@ -8,6 +8,7 @@ API layer (§22).
     GET  /api/investigations/{case_id}/findings
     GET  /api/investigations/{case_id}/evidence
     GET  /api/investigations/{case_id}/graph
+    GET  /api/sanctions/{case_id}       watchlist screening result for a case
     POST /api/investigations/{case_id}/review   record the human decision
     GET  /api/regulations/search?q=...  query the regulatory KB
     GET  /api/audit/{case_id}
@@ -182,6 +183,30 @@ def get_evidence(case_id: str):
 @app.get("/api/investigations/{case_id}/graph")
 def get_graph(case_id: str):
     return _get(case_id).graph
+
+
+@app.get("/api/sanctions/{case_id}")
+def get_sanctions(case_id: str):
+    """The screening result on its own — findings, every subject screened
+    (including the ones that came back clean, which is what makes 'was this
+    screened?' answerable later), the thresholds used, and the stated
+    limitations of the matching approach."""
+    case = _get(case_id)
+    result = next((r for r in case.agent_results if r.dimension == "sanctions"), None)
+    if not result:
+        raise HTTPException(404, "this case predates sanctions screening — re-run the investigation")
+    return {
+        "case_id": case.case_id,
+        "status": case.sanctions_status,
+        "severity": result.severity.value,
+        "findings": result.findings,
+        "screened": result.extra.get("screened", []),
+        "lists_screened": result.extra.get("lists_screened", []),
+        "thresholds": result.extra.get("thresholds", {}),
+        "known_limitations": result.extra.get("known_limitations", []),
+        "disclaimer": result.extra.get("disclaimer", ""),
+        "risk_floor_applied": case.risk.sanctions_floor_applied,
+    }
 
 
 @app.post("/api/investigations/{case_id}/review")

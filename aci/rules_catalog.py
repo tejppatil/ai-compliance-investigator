@@ -67,4 +67,15 @@ def catalog() -> list[dict]:
         {"key": "kyc_date_inconsistency", "agent": "kyc_completeness", "category": "kyc",
          "file": "aci/agents/kyc_agent.py",
          "trigger": "Entity's registration date falls after the customer's own onboarding date — a chronological impossibility worth flagging as a data-quality issue."},
+        {"key": "sanctions_hit", "agent": "sanctions_screening", "category": "sanctions",
+         "file": "aci/agents/sanctions_agent.py",
+         "trigger": (f"Beneficiary or a related party (director / beneficial owner) matches a bundled "
+                    f"FABRICATED watchlist entry at ≥ {config.SANCTIONS_MATCH_CONFIRMED:.0%} suffix-stripped "
+                    f"token-sort similarity → HIGH, and applies a HIGH floor to the case's risk band "
+                    f"regardless of the weighted score.")},
+        {"key": "sanctions_possible_match", "agent": "sanctions_screening", "category": "sanctions",
+         "file": "aci/agents/sanctions_agent.py",
+         "trigger": (f"Same screening at ≥ {config.SANCTIONS_MATCH_POSSIBLE:.0%} but below "
+                    f"{config.SANCTIONS_MATCH_CONFIRMED:.0%} similarity → MEDIUM, applying a MEDIUM floor. "
+                    f"Requires human confirmation; never treated as a confirmed match.")},
     ]
