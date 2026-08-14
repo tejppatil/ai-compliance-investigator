@@ -334,6 +334,24 @@ function NarrativeBlock({ narrative }) {
           <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>{v}</div>
         </div>
       ))}
+      {/* Rendered as a visibly distinct, badged suggestion — deliberately NOT
+          as another narrative field, and deliberately NOT pre-filled into the
+          decision form below. A default that looks like data is a decision
+          made by omission; this has to look like advice the officer can
+          ignore. Absent entirely on the deterministic template path. */}
+      {narrative.suggested_action && (
+        <div style={{ background: "var(--med-soft)", border: "1px dashed var(--med-line)", borderRadius: 8,
+          padding: "10px 12px", marginBottom: 10 }}>
+          <div className="mono" style={{ fontSize: 9.5, color: "var(--med)", textTransform: "uppercase",
+            letterSpacing: ".08em", marginBottom: 3 }}>
+            ◆ AI suggests · not a decision
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.5 }}>{narrative.suggested_action}</div>
+          <div style={{ fontSize: 10, color: "var(--faint)", marginTop: 5 }}>
+            A recommendation only. You choose the action below; nothing is pre-selected for you.
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: 10.5, color: "var(--faint)", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
         The AI does not make the regulatory decision. It prepares this case for a human compliance officer.
       </div>

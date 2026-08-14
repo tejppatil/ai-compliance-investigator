@@ -63,6 +63,15 @@ def investigate(transaction_id: str, world: World, use_ai_narrative: bool = True
     narrative, evidence, graph, unknowns, actions = investigation_agent.run(
         txn, world, results, risk, use_ai_narrative=use_ai_narrative)
     audit.append(AuditEntry(actor="system", action=f"Investigation Agent assembled {case_id} — narrative source: {narrative.source}"))
+    if narrative.suggested_action:
+        # Logged so the record shows what the AI suggested ALONGSIDE what the
+        # human actually decided — the pair is what makes AI recommendations
+        # auditable and calibratable over time. Explicitly marked as a
+        # suggestion so it can never be mistaken for the case outcome.
+        audit.append(AuditEntry(
+            actor="system",
+            action=f'AI SUGGESTED (not a decision): "{narrative.suggested_action}"',
+            details={"suggested_action": narrative.suggested_action, "source": narrative.source}))
     audit.append(AuditEntry(actor="system", action="Case ready — awaiting human decision"))
 
     return InvestigationCase(
