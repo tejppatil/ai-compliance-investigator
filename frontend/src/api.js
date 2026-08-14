@@ -43,6 +43,28 @@ export const api = {
   verifyAudit: (caseId) => request(`/api/audit/${caseId}/verify`),
   createTransaction: (payload) =>
     request("/api/transactions", { method: "POST", body: JSON.stringify(payload) }),
+
+  // ── Cyber Crime module (aci/api/cybercrime_routes.py) ──────────────────
+  cyberOfficers: () => request("/api/cyber/officers"),
+  cyberCases: () => request("/api/cyber/cases"),
+  cyberCase: (caseId) => request(`/api/cyber/cases/${caseId}`),
+  cyberEscalate: (caseId, officer_name, note = "") =>
+    request(`/api/cyber/cases/${caseId}/escalate`, { method: "POST", body: JSON.stringify({ officer_name, note }) }),
+  cyberTransfer: (caseId, new_officer_id, actor_name) =>
+    request(`/api/cyber/cases/${caseId}/transfer`, { method: "POST", body: JSON.stringify({ new_officer_id, actor_name }) }),
+  cyberFreeze: (txId, officer_name) =>
+    request(`/api/cyber/transactions/${txId}/freeze`, { method: "POST", body: JSON.stringify({ officer_name }) }),
+  cyberFreezeHop: (caseId, hop_index, officer_name) =>
+    request(`/api/cyber/cases/${caseId}/freeze-hop`, { method: "POST", body: JSON.stringify({ hop_index, officer_name }) }),
+  cyberRecentTransactions: (limit = 50) => request(`/api/cyber/transactions/recent?limit=${limit}`),
+  cyberGeoIncidents: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    const qs = q.toString();
+    return request(`/api/cyber/geo-incidents${qs ? `?${qs}` : ""}`);
+  },
+  cyberGraph: (caseId) => request(`/api/cyber/graph/${caseId}`),
 };
+
+export const CYBER_WS_URL = BASE.replace(/^http/, "ws") + "/ws/cyber/transactions";
 
 export const caseIdFor = (transactionId) => `CASE-${transactionId.split("-").pop()}`;
