@@ -90,6 +90,28 @@ RISK_POLICY = {
     "high": "Escalate to senior review — mandatory second-tier decision recommended.",
 }
 
+# ── Alert triage / queue ranking (aci/triage.py) ────────────────────────────
+# What decides which case an officer sees first. Same principle as
+# RISK_WEIGHTS: additive, inspectable, and surfaced through the API so the
+# ordering can be argued with rather than taken on faith.
+#
+# These are NOT normalised to 1.0 — unlike RISK_WEIGHTS, this isn't an average
+# producing a 0-1 risk band, it's a priority score whose absolute value has no
+# meaning beyond ordering. What matters is the RATIO between factors, and the
+# ratio encodes a deliberate claim: an unadjudicated sanctions match outranks
+# everything, including a HIGH-risk case, because it's the one finding with a
+# legal clock attached rather than an analytical judgement.
+TRIAGE_WEIGHTS = {
+    "sanctions_hit": 100.0,       # confirmed, unadjudicated match — top of the queue, always
+    "sanctions_possible": 45.0,   # needs a human to confirm or clear, but isn't yet a match
+    "risk_band": 40.0,            # × the band's severity score (high 1.0 → 40, medium 0.6 → 24, …)
+    "sla_breached": 35.0,         # escalated and past its SLA — already late
+    "sla_imminent": 20.0,         # escalated, inside TRIAGE_SLA_IMMINENT_HOURS of due
+    "age_per_day": 3.0,           # ages upward so nothing rots at the bottom of the queue…
+}
+TRIAGE_AGE_CAP_DAYS = 10          # …but capped, so age alone never outranks a real signal
+TRIAGE_SLA_IMMINENT_HOURS = 6
+
 # ── Local AI (Ollama) ───────────────────────────────────────────────────────
 # The system runs fully OFFLINE with no LLM at all: the Investigation Agent
 # falls back to a deterministic template narrative and every dimension score

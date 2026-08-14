@@ -37,6 +37,8 @@ export const api = {
   listRegulations: () => request("/api/regulations"),
   searchRegulations: (q, k = 5) => request(`/api/regulations/search?q=${encodeURIComponent(q)}&k=${k}`),
   listEscalations: () => request("/api/escalations"),
+  queue: () => request("/api/queue"),
+  sanctions: (caseId) => request(`/api/sanctions/${caseId}`),
   networkInsights: () => request("/api/network-insights"),
   riskMethodology: () => request("/api/risk-methodology"),
   rules: () => request("/api/rules"),
