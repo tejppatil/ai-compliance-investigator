@@ -50,7 +50,12 @@ def run(case_id: str, txn, world: World) -> AgentResult:
             confs = [r.confidence for r in rels if r.relationship_type == "director_of"
                      and r.src == d and r.tgt in (sender, ben)]
             findings.append(Finding(
-                id=_next_fid(), type="relationship", severity=Severity.MEDIUM,
+                # "common_director", not the vaguer "relationship" this
+                # previously emitted: the finding type must match its entry in
+                # aci/rules_catalog.py, or the catalogue silently stops
+                # describing what the code actually produces. Caught by
+                # tests/test_hardening.py, which now pins the two together.
+                id=_next_fid(), type="common_director", severity=Severity.MEDIUM,
                 description=f"Common director detected: {world.entity(d).name} directs both "
                             f"{world.entity(sender).name} and {world.entity(ben).name}.",
                 confidence=min(confs) if confs else 0.8, nodes=[d, sender, ben]))

@@ -74,3 +74,38 @@ Generated locally by `aci/data/synthetic.py`; exportable via
 **No real, confidential, or leaked financial data is used anywhere in this
 project.** Customers, entities, directors, transactions and invoices are all
 programmatically generated from a fixed seed.
+
+---
+
+## Sanctions / watchlist data
+
+Defined in `aci/data/synthetic_watchlist.py`. Held to the same standard as the
+regulatory KB above, but reaching the **opposite** conclusion — and for a
+reason worth stating plainly.
+
+The regulatory KB cites **real** documents because a compliance officer must
+be able to open the source and check it. The watchlist is **entirely
+fabricated**, because the failure mode there is inverted: a screenshot of a
+real designated name next to the words "MATCH — CONFIRMED", produced by a
+prototype, is a defamatory claim about a real party. There is no upside that
+justifies it.
+
+Concretely, this file contains:
+
+- **No** OFAC SDN, UN Consolidated, EU, or UK OFSI content — not scraped,
+  not embedded, not redistributed, not paraphrased.
+- Invented entity and individual names, invented programme codes, and
+  invented designation dates.
+- Deliberately fictional **list names** ("Synthetic Consolidated Designations
+  List", "Synthetic PEP & Adverse-Media Register") rather than borrowing a
+  real regulator's list name, so no screenshot of this UI can be mistaken for
+  a real screening result against a real list.
+- An explicit statement in the module docstring that any resemblance to a
+  real person or organisation is coincidental and unintended.
+
+`aci/agents/sanctions_agent.py` additionally publishes a `KNOWN_LIMITATIONS`
+list through `GET /api/sanctions/{case_id}` and renders it in the case UI:
+Latin-script similarity only, no date-of-birth or nationality corroboration,
+a static list with no versioning or refresh cadence, and no
+ownership-percentage derivation. A production deployment would replace this
+module wholesale with a licensed feed.
