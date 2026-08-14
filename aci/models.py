@@ -187,6 +187,12 @@ class Narrative(BaseModel):
     why_unusual: str
     who_involved: str
     conclusion: str
+    # An AI-drafted SUGGESTION for the officer's next step — never a decision,
+    # never recorded as the case outcome, and deliberately None on the
+    # deterministic template path rather than being fabricated (aci/llm.py).
+    # Kept optional so a model reply that omits it still validates instead of
+    # collapsing the whole narrative to the template.
+    suggested_action: Optional[str] = None
 
 
 class AuditEntry(BaseModel):
