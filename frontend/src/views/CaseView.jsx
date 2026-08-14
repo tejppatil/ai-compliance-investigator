@@ -6,6 +6,7 @@ import { ErrorBanner } from "./DashboardView.jsx";
 import InvestigationTimeline from "../components/InvestigationTimeline.jsx";
 import PipelineFlow from "../components/PipelineFlow.jsx";
 import SanctionsPanel from "../components/SanctionsPanel.jsx";
+import CaseQAPanel from "../components/CaseQAPanel.jsx";
 
 const STAGE_LABELS = {
   transaction_intelligence: "Transaction Intel", entity_intelligence: "Entity Intel",
@@ -255,6 +256,13 @@ export default function CaseView({ transactionId }) {
                 </div>
               ))}
             </Card>
+
+            {/* Sits after the evidence it draws on and BEFORE the decision
+                panel — a convenience layer for interrogating what's above,
+                not a step on the way to deciding. */}
+            <div style={{ marginBottom: 16 }}>
+              <CaseQAPanel caseId={caseData.case_id} />
+            </div>
 
             {reviewError && (
               <div className="card" style={{ marginBottom: 16, borderColor: "var(--crit-line)", background: "var(--crit-soft)", color: "var(--crit)", fontSize: 12 }}>

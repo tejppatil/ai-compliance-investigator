@@ -39,6 +39,8 @@ export const api = {
   listEscalations: () => request("/api/escalations"),
   queue: () => request("/api/queue"),
   sanctions: (caseId) => request(`/api/sanctions/${caseId}`),
+  askCase: (caseId, question) =>
+    request(`/api/investigations/${caseId}/ask`, { method: "POST", body: JSON.stringify({ question }) }),
   networkInsights: () => request("/api/network-insights"),
   riskMethodology: () => request("/api/risk-methodology"),
   rules: () => request("/api/rules"),
