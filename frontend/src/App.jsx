@@ -11,6 +11,7 @@ import HowItWorksView from "./views/HowItWorksView.jsx";
 import RulesView from "./views/RulesView.jsx";
 import RegulatoryView from "./views/RegulatoryView.jsx";
 import AboutView from "./views/AboutView.jsx";
+import CyberModuleShell from "./cybercrime/CyberModuleShell.jsx";
 
 const TITLES = {
   dashboard: "Dashboard",
@@ -25,13 +26,16 @@ const TITLES = {
 };
 
 export default function App() {
-  const { loggedIn } = usePersona();
+  const { loggedIn, persona } = usePersona();
   const [view, setView] = React.useState("dashboard");
   const [activeTx, setActiveTx] = React.useState(null);
 
   const openCase = (txId) => { setActiveTx(txId); setView("case"); };
 
   if (!loggedIn) return <RBALandingView />;
+  // The signed-in role decides which module's console you get — the two are
+  // separate products sharing one login, not tabs within one dashboard.
+  if (persona.module === "cybercrime") return <CyberModuleShell />;
 
   return (
     <div style={{ display: "flex", height: "100vh", background: "var(--page)" }}>

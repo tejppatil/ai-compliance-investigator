@@ -2,7 +2,7 @@ import React from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from "recharts";
 import { Card, Pill, ThemeToggle, useThemeColors } from "../components.jsx";
 import { api } from "../api.js";
-import { usePersona, PERSONAS } from "../persona.jsx";
+import { usePersona, PERSONAS, MODULES } from "../persona.jsx";
 
 const SEV_COLOR = { high: "var(--high)", medium: "var(--med)", low: "var(--ok)", none: "var(--faint)" };
 
@@ -128,31 +128,37 @@ export default function RBALandingView() {
           </>
         )}
 
-        <Card style={{ maxWidth: 420, margin: "0 auto" }}>
+        <Card style={{ maxWidth: 460, margin: "0 auto" }}>
           <div className="eyebrow" style={{ marginBottom: 4, textAlign: "center" }}>SIGN IN</div>
           <div style={{ fontSize: 13, fontWeight: 600, textAlign: "center", marginBottom: 18 }}>
-            Enter the compliance console
+            Enter the investigation console
           </div>
           <form onSubmit={submit}>
             <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>Name</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-              placeholder={PERSONAS[role].name} style={{ width: "100%", marginBottom: 14 }} />
-            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>Role</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 18 }}>
-              {Object.values(PERSONAS).map((p) => (
-                <button key={p.id} type="button" onClick={() => setRole(p.id)}
-                  style={{ padding: "10px 8px", borderRadius: 8, cursor: "pointer", textAlign: "left",
-                    border: `1.5px solid ${role === p.id ? "var(--accent)" : "var(--border)"}`,
-                    background: role === p.id ? "var(--sunken)" : "transparent" }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{p.title}</div>
-                </button>
-              ))}
-            </div>
+              placeholder={PERSONAS[role].name} style={{ width: "100%", marginBottom: 16 }} />
+            {Object.values(MODULES).map((mod) => (
+              <div key={mod.id} style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 2 }}>{mod.label}</label>
+                <div style={{ fontSize: 9.5, color: "var(--faint)", marginBottom: 6 }}>{mod.subtitle}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {Object.values(PERSONAS).filter((p) => p.module === mod.id).map((p) => (
+                    <button key={p.id} type="button" onClick={() => setRole(p.id)}
+                      style={{ padding: "10px 8px", borderRadius: 8, cursor: "pointer", textAlign: "left",
+                        border: `1.5px solid ${role === p.id ? "var(--accent)" : "var(--border)"}`,
+                        background: role === p.id ? "var(--sunken)" : "transparent" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{p.title}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
             <button type="submit" className="btn-primary" style={{ width: "100%" }}>Sign in</button>
           </form>
           <div style={{ fontSize: 10, color: "var(--faint)", marginTop: 14, lineHeight: 1.5, textAlign: "center" }}>
-            Demo sign-in for this console — no password required. The two-tier escalation control
-            this unlocks is enforced by the API itself (a real 403), not by this screen.
+            Demo sign-in — no password required. The compliance module's two-tier escalation control
+            is enforced by the API itself (a real 403), not by this screen; the cyber crime module
+            attributes every action by name in the case log rather than gating by role.
           </div>
         </Card>
       </div>

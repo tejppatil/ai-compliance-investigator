@@ -1,5 +1,5 @@
 import React from "react";
-import { PERSONAS, usePersona } from "./persona.jsx";
+import { MODULES, PERSONAS, usePersona } from "./persona.jsx";
 
 const SEV_CLASS = { high: "pill-high", medium: "pill-med", low: "pill-ok", none: "pill-none" };
 const SEV_LABEL = { high: "HIGH", medium: "MEDIUM", low: "LOW", none: "NONE" };
@@ -83,24 +83,31 @@ export function ThemeToggle() {
   );
 }
 
-export function Sidebar({ view, setView }) {
-  const items = [
-    { k: "dashboard", label: "Dashboard", icon: "▦" },
-    { k: "queue", label: "Case queue", icon: "▣" },
-    { k: "new-transaction", label: "New transaction", icon: "✚" },
-    { k: "escalations", label: "Escalation queue", icon: "▲" },
-    { k: "how-it-works", label: "How it works", icon: "➜" },
-    { k: "rules", label: "Detection rules", icon: "☰" },
-    { k: "regs", label: "Regulatory KB", icon: "▤" },
-    { k: "about", label: "About & guardrails", icon: "◈" },
-  ];
+const COMPLIANCE_ITEMS = [
+  { k: "dashboard", label: "Dashboard", icon: "▦" },
+  { k: "queue", label: "Case queue", icon: "▣" },
+  { k: "new-transaction", label: "New transaction", icon: "✚" },
+  { k: "escalations", label: "Escalation queue", icon: "▲" },
+  { k: "how-it-works", label: "How it works", icon: "➜" },
+  { k: "rules", label: "Detection rules", icon: "☰" },
+  { k: "regs", label: "Regulatory KB", icon: "▤" },
+  { k: "about", label: "About & guardrails", icon: "◈" },
+];
+
+export const CYBER_ITEMS = [
+  { k: "command", label: "Command Center", icon: "◉" },
+  { k: "case-ops", label: "Case Ops", icon: "⇄" },
+  { k: "feed", label: "Transaction Feed", icon: "▤" },
+  { k: "heatmap", label: "Crime Heat Map", icon: "◎" },
+  { k: "intel", label: "Intelligence Graph", icon: "◈" },
+];
+
+function SidebarShell({ view, setView, items, eyebrow, title, footer }) {
   return (
     <div style={{ width: 216, background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
       <div style={{ padding: "18px 16px", borderBottom: "1px solid var(--border)" }}>
-        <div className="eyebrow" style={{ color: "var(--accent)", marginBottom: 4 }}>GIFT · IFSC</div>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, lineHeight: 1.25 }}>
-          Compliance<br />Investigator
-        </div>
+        <div className="eyebrow" style={{ color: "var(--accent)", marginBottom: 4 }}>{eyebrow}</div>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, lineHeight: 1.25 }}>{title}</div>
       </div>
       <div style={{ padding: 10, flex: 1 }}>
         {items.map((it) => {
@@ -117,10 +124,31 @@ export function Sidebar({ view, setView }) {
         })}
       </div>
       <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)", fontSize: 10.5, color: "var(--faint)", lineHeight: 1.5 }}>
-        <div style={{ color: "var(--ok)", fontFamily: "var(--font-mono)", fontSize: 10 }}>● SYNTHETIC / PROTOTYPE DATA</div>
-        AI gathers evidence.<br />A human decides.
+        {footer}
       </div>
     </div>
+  );
+}
+
+export function Sidebar({ view, setView }) {
+  return (
+    <SidebarShell view={view} setView={setView} items={COMPLIANCE_ITEMS} eyebrow="GIFT · IFSC"
+      title={<>Compliance<br />Investigator</>}
+      footer={<>
+        <div style={{ color: "var(--ok)", fontFamily: "var(--font-mono)", fontSize: 10 }}>● SYNTHETIC / PROTOTYPE DATA</div>
+        AI gathers evidence.<br />A human decides.
+      </>} />
+  );
+}
+
+export function CyberSidebar({ view, setView }) {
+  return (
+    <SidebarShell view={view} setView={setView} items={CYBER_ITEMS} eyebrow="CYBER CRIME UNIT"
+      title={<>Fraud & Cyber<br />Command</>}
+      footer={<>
+        <div style={{ color: "var(--ok)", fontFamily: "var(--font-mono)", fontSize: 10 }}>● SIMULATED LIVE FEED</div>
+        Freeze actions are officer-<br />triggered, always logged.
+      </>} />
   );
 }
 
@@ -138,6 +166,9 @@ export function TopBar({ title, subtitle }) {
   );
 }
 
+const ROLE_BADGE = { officer: "OFFICER", senior: "SENIOR", nodal: "NODAL LEAD", io: "INVESTIGATION OFFICER", analyst: "ANALYST" };
+const ROLE_AVATAR = { senior: "#8b5cf6", nodal: "#8b5cf6", io: "var(--accent)", analyst: "#0ea5e9", officer: "var(--accent)" };
+
 function PersonaSwitcher() {
   const { persona, setPersonaId, logout } = usePersona();
   const [open, setOpen] = React.useState(false);
@@ -147,41 +178,51 @@ function PersonaSwitcher() {
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
+  const grouped = Object.values(MODULES).map((m) => ({
+    module: m, people: Object.values(PERSONAS).filter((p) => p.module === m.id),
+  }));
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => setOpen((o) => !o)}
+      <button data-testid="persona-switcher" onClick={() => setOpen((o) => !o)}
         style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 10px 5px 5px", background: "var(--raised)",
           borderRadius: 20, border: "1px solid var(--border)", cursor: "pointer" }}>
-        <div style={{ width: 22, height: 22, borderRadius: 11, background: persona.role === "senior" ? "#8b5cf6" : "var(--accent)",
+        <div style={{ width: 22, height: 22, borderRadius: 11, background: ROLE_AVATAR[persona.role] || "var(--accent)",
           display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
           {persona.initials}
         </div>
         <div style={{ textAlign: "left" }}>
           <div style={{ fontSize: 11, color: "var(--text)", fontWeight: 600, lineHeight: 1.2 }}>{persona.name}</div>
-          <div className="mono" style={{ fontSize: 8.5, color: "var(--faint)", lineHeight: 1.2 }}>ACTING AS · {persona.role === "senior" ? "SENIOR" : "OFFICER"}</div>
+          <div className="mono" style={{ fontSize: 8.5, color: "var(--faint)", lineHeight: 1.2 }}>ACTING AS · {ROLE_BADGE[persona.role] || persona.role.toUpperCase()}</div>
         </div>
         <span style={{ color: "var(--faint)", fontSize: 9, marginLeft: 2 }}>▾</span>
       </button>
       {open && (
-        <div style={{ position: "absolute", right: 0, top: 38, width: 240, background: "var(--surface)", border: "1px solid var(--border)",
-          borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.16)", padding: 6, zIndex: 50 }}>
+        <div style={{ position: "absolute", right: 0, top: 38, width: 268, background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.16)", padding: 6, zIndex: 300 }}>
           <div style={{ fontSize: 9.5, color: "var(--faint)", padding: "5px 8px 3px" }}>DEMO PERSONA SWITCHER — not a login</div>
-          {Object.values(PERSONAS).map((p) => (
-            <button key={p.id} onClick={() => { setPersonaId(p.id); setOpen(false); }}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "8px", borderRadius: 7, border: "none",
-                background: p.id === persona.id ? "var(--raised)" : "transparent", cursor: "pointer", textAlign: "left" }}>
-              <div style={{ width: 22, height: 22, borderRadius: 11, background: p.role === "senior" ? "#8b5cf6" : "var(--accent)",
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                {p.initials}
+          {grouped.map(({ module, people }) => (
+            <div key={module.id}>
+              <div className="mono" style={{ fontSize: 8.5, color: "var(--faint)", padding: "6px 8px 2px", textTransform: "uppercase", letterSpacing: ".06em" }}>
+                {module.label}
               </div>
-              <div>
-                <div style={{ fontSize: 12, color: "var(--text)", fontWeight: 600 }}>{p.name}</div>
-                <div style={{ fontSize: 10, color: "var(--muted)" }}>{p.title}</div>
-              </div>
-            </button>
+              {people.map((p) => (
+                <button key={p.id} onClick={() => { setPersonaId(p.id); setOpen(false); }}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "8px", borderRadius: 7, border: "none",
+                    background: p.id === persona.id ? "var(--raised)" : "transparent", cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ width: 22, height: 22, borderRadius: 11, background: ROLE_AVATAR[p.role] || "var(--accent)",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                    {p.initials}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: "var(--text)", fontWeight: 600 }}>{p.name}</div>
+                    <div style={{ fontSize: 10, color: "var(--muted)" }}>{p.title}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
           ))}
           <div style={{ fontSize: 9.5, color: "var(--faint)", padding: "6px 8px 6px", lineHeight: 1.4, borderTop: "1px solid var(--border)", marginTop: 4 }}>
-            The API enforces this server-side — a tier-1 officer decision on an already-escalated case gets a real 403, regardless of what this switcher claims.
+            Switching module changes console. The compliance module's tier-2 control is enforced server-side — a tier-1 decision on an escalated case gets a real 403 regardless of what this claims.
           </div>
           <button onClick={() => { setOpen(false); logout(); }}
             style={{ width: "100%", textAlign: "left", padding: "8px", borderRadius: 7, border: "none",

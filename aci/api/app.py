@@ -37,6 +37,9 @@ from pydantic import BaseModel
 
 from aci import config, db, llm
 from aci.agents.risk_agent import _RISK_DESCRIPTIONS, _RISK_LABELS
+from aci.api.cybercrime_routes import register_websocket
+from aci.api.cybercrime_routes import router as cybercrime_router
+from aci.cybercrime.store import STORE as CYBER_STORE
 from aci.data.synthetic import seed_world
 from aci.models import Document, Entity, Transaction
 from aci.orchestrator import investigate, record_human_decision
@@ -45,6 +48,8 @@ from aci.rules_catalog import catalog as rules_catalog
 
 app = FastAPI(title="AI Compliance Investigator", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(cybercrime_router)
+register_websocket(app)
 
 WORLD = seed_world()
 RETRIEVER = Retriever()
@@ -54,6 +59,7 @@ RETRIEVER = Retriever()
 def _startup() -> None:
     db.init_db()
     RETRIEVER.ensure_dense_index()  # best-effort; no-op if Ollama isn't reachable
+    CYBER_STORE.start()  # begins the simulated live transaction feed
 
 
 class InvestigateReq(BaseModel):

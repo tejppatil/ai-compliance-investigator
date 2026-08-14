@@ -210,6 +210,56 @@ Interactive docs at `http://127.0.0.1:8077/docs`.
 
 ---
 
+## Second module: Cyber Crime & Financial Fraud Investigation
+
+A separate law-enforcement console sharing the same login, for a different
+user and a different problem: live transaction monitoring and multi-officer
+case command, rather than corporate cross-border AML case files. Sign in as
+one of the three Cyber Crime Unit roles to enter it.
+
+| Role | Lands on | Sees |
+|---|---|---|
+| Nodal / Escalation Lead | Command Center | Every officer's status, assignment and last action; escalate or transfer any case |
+| Investigation Officer (IO) | Case Ops | The layering flow — source → mule → mule → cash-out — with a per-hop holding-freeze action |
+| Bank Fraud / Cyber Cell Analyst | Transaction Feed | The live stream with rule-engine flags and a velocity chart |
+
+Also available to all three: a **geographic heat map** (filterable by
+timeframe, crime type and severity) and an **intelligence link network**
+connecting suspect, financial and spatial entities, each node opening a
+detail drawer with its confidence score and raw indicators.
+
+```
+GET  /api/cyber/officers | /cases | /cases/{id}
+POST /api/cyber/cases/{id}/escalate      {"officer_name","note"}
+POST /api/cyber/cases/{id}/transfer      {"new_officer_id","actor_name"}
+POST /api/cyber/cases/{id}/freeze-hop    {"hop_index","officer_name"}
+POST /api/cyber/transactions/{id}/freeze {"officer_name"}
+GET  /api/cyber/transactions/recent | /geo-incidents | /graph/{case_id}
+WS   /ws/cyber/transactions               live feed
+```
+
+**The feed is a real WebSocket, not polling.** A server-side simulator
+(`aci/cybercrime/simulator.py`) generates a transaction every ~2.5s and
+pushes it to every connected client; it builds genuine multi-hop layering
+chains and velocity bursts over successive ticks, so the rule engine
+(`aci/cybercrime/rules.py`) has real patterns to catch rather than
+pre-labelled ones. Every flag names the threshold it crossed — known mule
+account, layering depth, velocity window, high-risk cash-out location,
+single-transfer value — the same "no unexplained scores" rule the compliance
+module holds itself to.
+
+**Freezes are officer actions, never automatic.** The rule engine flags and
+raises alerts; a human clicks the freeze, and it's written to the case
+history attributed by name. Same boundary as *AI investigates, human
+decides* on the compliance side.
+
+**One caveat, stated plainly:** the heat map's basemap tiles are fetched from
+a public CDN — the only part of this project that touches the internet at
+runtime. Offline, the map renders blank tiles while every marker, filter and
+count still works, because those come from our own API.
+
+---
+
 ## Layout
 
 ```
@@ -223,12 +273,16 @@ aci/
   agents/            transaction · entity · compliance · document · kyc · risk · investigation
   rag/               regulatory KB + hybrid (dense + TF-IDF) retriever
   evaluation/        precision/recall/F1, reported per scenario
-  api/app.py         FastAPI endpoints
+  api/app.py         FastAPI endpoints (+ cybercrime_routes.py)
   data/synthetic.py  seeded demo world + labelled bulk generator
+  cybercrime/        second module — models · deterministic rules · live
+                     simulator · in-memory officer/case store · seed data
 frontend/            React + Vite console (VIGILO theme + Recharts), incl.
-                     persona.jsx (login/session + tier-1/tier-2 switcher),
+                     persona.jsx (login/session, 5 roles across 2 modules),
                      PipelineFlow.jsx (live + static pipeline diagram),
-                     InvestigationTimeline.jsx, and the RBA landing/login page
+                     InvestigationTimeline.jsx, the RBA landing/login page,
+                     and cybercrime/ (command center · case ops · live feed ·
+                     Leaflet heat map · intelligence graph)
 scripts/             setup · start · export_dataset
 db/schema.sql        SQLite schema
 docs/                blueprint · PROVENANCE · DATASET_CARD

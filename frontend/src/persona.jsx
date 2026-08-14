@@ -1,15 +1,28 @@
 import React from "react";
 
-// Two demo roles, switched client-side — NOT real authentication. The server
-// enforces the actual control (aci/orchestrator.py record_human_decision
-// rejects a tier-1 "officer" decision on an already-escalated case with a
-// real 403, regardless of what the client claims); login/persona-switching
-// just lets one person demo both sides of that boundary without two
-// accounts. Same localStorage-persistence pattern as the theme toggle in
-// components.jsx.
+// Five demo roles across two modules, switched client-side — NOT real
+// authentication. Where a server-side control actually exists (the
+// compliance module's tier-1/tier-2 escalation — aci/orchestrator.py
+// record_human_decision rejects a tier-1 "officer" decision on an
+// already-escalated case with a real 403, regardless of what the client
+// claims), login/persona-switching just lets one person demo both sides of
+// that boundary without two accounts. The cybercrime module's officer
+// identity is logged (every action is attributed by name in the case
+// history/audit) but not itself an authorization boundary — same posture as
+// a real command console where any signed-in officer can act, and
+// accountability comes from the log, not a lock. Same localStorage-
+// persistence pattern as the theme toggle in components.jsx.
 export const PERSONAS = {
-  officer: { id: "officer", role: "officer", name: "S. Compliance Officer", initials: "SC", title: "Compliance Officer" },
-  senior: { id: "senior", role: "senior", name: "R. Menon", initials: "RM", title: "Senior Compliance Officer · MLRO" },
+  officer: { id: "officer", role: "officer", name: "S. Compliance Officer", initials: "SC", title: "Compliance Officer", module: "compliance" },
+  senior: { id: "senior", role: "senior", name: "R. Menon", initials: "RM", title: "Senior Compliance Officer · MLRO", module: "compliance" },
+  nodal: { id: "nodal", role: "nodal", name: "A. Kulkarni", initials: "AK", title: "Nodal / Escalation Lead Officer", module: "cybercrime" },
+  io: { id: "io", role: "io", name: "V. Sharma", initials: "VS", title: "Investigation Officer (IO)", module: "cybercrime" },
+  analyst: { id: "analyst", role: "analyst", name: "N. Iyer", initials: "NI", title: "Bank Fraud / Cyber Cell Analyst", module: "cybercrime" },
+};
+
+export const MODULES = {
+  compliance: { id: "compliance", label: "Compliance Unit", subtitle: "Cross-border AML investigation · GIFT IFSC" },
+  cybercrime: { id: "cybercrime", label: "Cyber Crime Unit", subtitle: "Live fraud monitoring · multi-officer command" },
 };
 
 function initialsOf(name) {
