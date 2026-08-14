@@ -14,6 +14,7 @@ API layer (§22).
     GET  /api/audit/{case_id}
     GET  /api/audit/{case_id}/verify     tamper-evident hash-chain check
     GET  /api/audit                      recent activity across all cases
+    GET  /api/queue                       triage-ranked work queue + the ranking model
     GET  /api/escalations                 cases awaiting senior review
     GET  /api/network-insights            entities shared across different customers' cases
     GET  /api/risk-methodology            RBA weights, policy, dimension descriptions
@@ -36,7 +37,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from aci import config, db, llm
+from aci import config, db, llm, triage
 from aci.agents.risk_agent import _RISK_DESCRIPTIONS, _RISK_LABELS
 from aci.api.cybercrime_routes import register_websocket
 from aci.api.cybercrime_routes import router as cybercrime_router
@@ -251,6 +252,17 @@ def verify_audit(case_id: str):
 def get_recent_audit(limit: int = 15):
     """Recent activity across ALL cases — the dashboard's live feed."""
     return db.recent_audit(limit)
+
+
+@app.get("/api/queue")
+def get_queue(include_closed: bool = False):
+    """The officer's work queue, ranked by aci/triage.py. Returns each case
+    with its priority score AND the reasons behind it, plus the ranking model
+    itself — an order you can't interrogate is one people stop trusting."""
+    return {
+        "cases": triage.rank(db.list_cases(), include_closed=include_closed),
+        "model": triage.explain(),
+    }
 
 
 @app.get("/api/escalations")
