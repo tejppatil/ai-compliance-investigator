@@ -47,7 +47,8 @@ Or drive it from the terminal:
 python run_demo.py                 # full TX-84721 investigation report
 python run_demo.py TX-90233        # the structuring scenario
 python run_demo.py --eval          # precision / recall / F1, per scenario
-pytest -q                          # 54 tests incl. red-team, prompt injection, two-tier escalation, hash-chain integrity
+pytest -q                          # 162 tests incl. red-team, prompt injection, sanctions matching,
+                                   # triage ordering, two-tier escalation, hash-chain integrity
 ```
 
 **Without Ollama it still works.** Narratives fall back to a deterministic
@@ -69,9 +70,11 @@ below for what's actually enforced server-side.
 
 ```
 Transaction → Customer history → Transaction Intelligence → Entity Intelligence
-  → Compliance Intelligence (RAG) → Document Analysis → KYC Completeness
-  → Risk Engine (incl. customer risk rating) → Evidence correlation → Investigation narrative
-  → TIER-1 HUMAN REVIEW → (optional) ESCALATION → TIER-2 SENIOR REVIEW → Audit trail
+  → Sanctions Screening → Compliance Intelligence (RAG) → Document Analysis → KYC Completeness
+  → Risk Engine (incl. customer risk rating + sanctions floor) → Evidence correlation
+  → Investigation narrative (+ AI-suggested next step)
+  → TRIAGE-RANKED QUEUE → TIER-1 HUMAN REVIEW → (optional) ESCALATION
+  → TIER-2 SENIOR REVIEW → Audit trail
 ```
 
 Every case page shows this exact sequence as a live, animating diagram (`PipelineFlow`, driven by
@@ -82,11 +85,13 @@ stage instead of a score just appearing. A static version lives on its own **How
 |---|---|---|
 | Transaction Intelligence | `aci/agents/transaction_agent.py` | Median, ratio, velocity, structuring, layering — **pure statistics, no LLM** |
 | Entity Intelligence | `aci/agents/entity_agent.py` | Common directors, UBO chains. Never asserts wrongdoing |
+| Sanctions Screening | `aci/agents/sanctions_agent.py` | Counterparty **and** related parties vs a bundled **synthetic** watchlist. A confirmed match applies a HIGH floor to the risk band |
 | Compliance Intelligence | `aci/agents/compliance_agent.py` + `aci/rag/` | Jurisdiction-filtered retrieval with full provenance |
 | Document Analysis | `aci/agents/document_agent.py` | Invoice ↔ transaction reconciliation, incl. amount mismatch |
 | KYC Completeness | `aci/agents/kyc_agent.py` | Onboarding-record consistency (name match, ownership completeness, date sanity) — a data-quality check, kept **out of** the risk score on purpose |
 | Risk Engine | `aci/agents/risk_agent.py` | Six-dimension Risk-Based Approach; each row traces to the finding IDs behind it |
 | Investigation Agent | `aci/agents/investigation_agent.py` + `aci/llm.py` | Correlates everything; builds the evidence graph and timeline |
+| Triage / queue ranking | `aci/triage.py` | Ranks the open queue by sanctions match, risk band, SLA proximity and age — deterministic, and every case shows its reasons |
 | **Tier-1 review** | `orchestrator.record_human_decision` (role=officer) | Close, request info/EDD, or escalate — **the only place a decision enters the system** |
 | **Tier-2 senior review** | `orchestrator.record_human_decision` (role=senior) | Only reachable once escalated; approve, override, or return — enforced server-side |
 
@@ -123,6 +128,24 @@ live from `aci/config.py`, not a paraphrase that could drift from the code.
   relevance floor the system says *"Insufficient information in the configured
   regulatory knowledge base."* rather than reaching for a weak match. See
   [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
+- **Sanctions is a floor, not a weighted dimension.** A confirmed watchlist
+  match forces a HIGH band while the weighted score stays visible and
+  unchanged, and the UI says the band was *raised*. At any defensible weight
+  (~0.15) a match on an otherwise-clean transaction would score ~0.15 and band
+  LOW — averaging is the right model for "how unusual is this?" and the wrong
+  one for "is this party prohibited?", which is categorical. A *possible*
+  match floors only at MEDIUM, so a fuzzy name collision can't make the alarm
+  meaningless through overuse. Same reasoning that keeps KYC out of the score.
+- **AI suggestions are never defaults.** The Investigation Agent drafts a
+  one-line suggested next step, badged *"AI suggests · not a decision"*. It
+  does not pre-fill the review form — a default that looks like data is a
+  decision made by omission. `record_human_decision` never reads it, and the
+  suggestion is audit-logged next to what the human actually decided so the
+  two can be compared later.
+- **Case Q&A is evidence-scoped and refuses honestly.** Questions are answered
+  only from that case's own record. With no local LLM it says so rather than
+  templating an answer — the fallback that makes narratives safe would make
+  Q&A dishonest. Both question and answer go into the hash-chained audit trail.
 - **Confidence ≠ risk.** `HIGH @ 0.84` means the evidence supports a
   high-priority investigation — not an 84% chance of fraud. Shown as separate
   bars.
@@ -162,8 +185,21 @@ live from `aci/config.py`, not a paraphrase that could drift from the code.
 | Recall | 1.000 |
 | F1 | 0.726 |
 | False-positive rate | 0.189 |
-| Mean case time | 11.1 ms (deterministic path, five agents) |
+| Mean case time | 12.9 ms (deterministic path, six agents) |
 | Per-scenario detection | 1.000 across all 8 anomalous scenarios |
+| Sanctions false positives | 0 across 5,000 synthetic counterparties |
+
+**Adding sanctions screening did not move precision/recall/F1, and that's the
+honest result rather than a missing update:** the evaluation population
+contains no watchlist matches, so the screening agent runs on all 5,000 cases
+and correctly returns clean every time. What that *does* establish is a
+zero-false-positive rate at scale — the failure mode that actually sinks
+screening systems. The matching logic itself is exercised by 24 unit tests and
+by the deliberate hit/near-miss demo pair (`TX-66150` / `TX-66151`), which are
+identical in customer, corridor, amount band and documentation and produce an
+identical weighted score of 0.545 — so the band difference between them is
+attributable to screening alone. Only mean case time moved (11.1 → 12.9 ms),
+from running a sixth agent.
 
 Tuned for recall: in AML triage a missed case costs more than an extra review.
 The `normal` population contains deliberate near-misses (legitimate spikes,
@@ -192,9 +228,14 @@ POST /api/investigations                     {"transaction_id": "TX-84721"}
 GET  /api/investigations                     all persisted cases
 GET  /api/investigations/{case_id}           full case
      .../findings | .../evidence | .../graph
+GET  /api/sanctions/{case_id}                screening result: findings, every party screened
+                                              (including the clean ones), thresholds, limitations
+POST /api/investigations/{case_id}/ask       {"question":"..."} — answered only from this case's
+                                              evidence; says so plainly if the local LLM is down
 POST /api/investigations/{case_id}/review    tier 1: {"decision":"edd|escalate|info|close","role":"officer"}
                                               tier 2: {"decision":"senior_close|senior_override|senior_return","role":"senior"}
                                               — a tier-1 decision on an already-escalated case returns HTTP 403
+GET  /api/queue                              triage-ranked work queue + the ranking model itself
 GET  /api/escalations                        cases awaiting the senior reviewer, with SLA + overdue flag
 GET  /api/network-insights                   entities shared across different customers' cases
 GET  /api/risk-methodology                   RBA weights, dimension descriptions, policy table
@@ -270,11 +311,13 @@ aci/
   llm.py             local Ollama provider, validation, template fallback
   db.py              SQLite persistence (self-healing schema, hash-chain, network insights)
   rules_catalog.py   the full detection-rule reference, thresholds pulled live from config
-  agents/            transaction · entity · compliance · document · kyc · risk · investigation
+  triage.py          deterministic queue ranking (not an agent — ranks cases, doesn't analyse one)
+  agents/            transaction · entity · sanctions · compliance · document · kyc · risk · investigation
   rag/               regulatory KB + hybrid (dense + TF-IDF) retriever
   evaluation/        precision/recall/F1, reported per scenario
   api/app.py         FastAPI endpoints (+ cybercrime_routes.py)
   data/synthetic.py  seeded demo world + labelled bulk generator
+  data/synthetic_watchlist.py  FABRICATED sanctions/PEP list — no real list is embedded
   cybercrime/        second module — models · deterministic rules · live
                      simulator · in-memory officer/case store · seed data
 frontend/            React + Vite console (VIGILO theme + Recharts), incl.
@@ -318,6 +361,26 @@ investigative tasks — retrieving data, analysing behaviour, finding
 relationships, retrieving regulation, correlating evidence, drafting a case. It
 does **not** mean the AI decides. It never freezes accounts, rejects customers,
 files reports, or declares fraud.
+
+### Roadmap — deliberately not built
+
+Named here so their absence is a decision on the record rather than an
+oversight:
+
+- **Treasury / liquidity module** and **multi-rail payment routing** — out of
+  scope. Both are payment-operations concerns; this system investigates
+  transactions, it doesn't move money, and bolting on a rail it can't
+  actually settle over would be a demo rather than a capability.
+- **Licensed sanctions feed** — the bundled list is fabricated (see
+  [`docs/PROVENANCE.md`](docs/PROVENANCE.md)). Production screening needs a
+  licensed feed with versioning, delta updates and a documented refresh
+  cadence, plus phonetic/cross-script matching and date-of-birth
+  corroboration. `aci/agents/sanctions_agent.py` publishes its own
+  `KNOWN_LIMITATIONS` through the API and into the UI rather than leaving
+  them implied.
+- **Real authentication** — the persona switcher is a labelled demo
+  mechanism. The two-tier escalation control it exercises *is* enforced
+  server-side; the identity behind it is not.
 
 **Not legal or compliance advice.** See [`LICENSE`](LICENSE).
 

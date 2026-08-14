@@ -71,7 +71,7 @@ def build_graph(txn, world: World, results) -> dict:
             en = world.entity(n)
             if en and not any(x["id"] == n for x in nodes):
                 nodes.append({"id": n, "label": en.name, "kind": "person" if en.entity_type == "individual" else "entity"})
-        if f.type == "relationship" and len(f.nodes) == 3:
+        if f.type == "common_director" and len(f.nodes) == 3:
             d, s, b = f.nodes
             edges.append({"src": d, "tgt": s, "label": "directs", "hot": True})
             edges.append({"src": d, "tgt": b, "label": "directs", "hot": True})
