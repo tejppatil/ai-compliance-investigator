@@ -9,6 +9,7 @@ API layer (§22).
     GET  /api/investigations/{case_id}/evidence
     GET  /api/investigations/{case_id}/graph
     GET  /api/sanctions/{case_id}       watchlist screening result for a case
+    POST /api/investigations/{case_id}/ask   {"question": "..."} — evidence-scoped Q&A
     POST /api/investigations/{case_id}/review   record the human decision
     GET  /api/regulations/search?q=...  query the regulatory KB
     GET  /api/audit/{case_id}
@@ -43,7 +44,7 @@ from aci.api.cybercrime_routes import register_websocket
 from aci.api.cybercrime_routes import router as cybercrime_router
 from aci.cybercrime.store import STORE as CYBER_STORE
 from aci.data.synthetic import seed_world
-from aci.models import Document, Entity, Transaction
+from aci.models import AuditEntry, Document, Entity, Transaction
 from aci.orchestrator import investigate, record_human_decision
 from aci.rag.retriever import Retriever
 from aci.rules_catalog import catalog as rules_catalog
@@ -73,6 +74,10 @@ class ReviewReq(BaseModel):
     decision: str  # tier 1: close|info|edd|escalate — tier 2: senior_close|senior_override|senior_return
     note: str = ""
     role: str = "officer"  # "officer" | "senior" — enforced server-side, not just hidden in the UI
+
+
+class AskReq(BaseModel):
+    question: str
 
 
 class NewTransactionReq(BaseModel):
@@ -208,6 +213,45 @@ def get_sanctions(case_id: str):
         "disclaimer": result.extra.get("disclaimer", ""),
         "risk_floor_applied": case.risk.sanctions_floor_applied,
     }
+
+
+@app.post("/api/investigations/{case_id}/ask")
+def ask_case(case_id: str, req: AskReq):
+    """Answer a question strictly from THIS case's own persisted evidence.
+
+    The question and the evidence go to the model in separately fenced blocks
+    with an instruction to treat both as quoted data (same pattern as document
+    text in narrative generation). If the local LLM isn't running, this says
+    so rather than falling back to a template — a templated answer to an
+    arbitrary question would be a plausible-looking non-answer.
+
+    Q&A is read-only: it can never change a case's data or its disposition.
+    The exchange IS written to the audit trail, because what an officer asked
+    the system and what it told them is part of how the decision was reached.
+    """
+    case = _get(case_id)
+    question = req.question.strip()
+    if not question:
+        raise HTTPException(400, "question must not be empty")
+    if len(question) > 500:
+        raise HTTPException(400, "question is too long (500 characters max)")
+
+    result = llm.answer_case_question(case, question)
+
+    case.audit.append(AuditEntry(
+        actor="human", action=f'Officer asked the case Q&A: "{question}"',
+        details={"question": question, "answered": bool(result.get("answer")),
+                "grounded": result.get("grounded", False),
+                "llm_available": result.get("available", False)}))
+    if result.get("answer"):
+        case.audit.append(AuditEntry(
+            actor="system", action=f'Case Q&A answered (AI-generated, evidence-scoped): "{result["answer"]}"',
+            details={"evidence_ids": result.get("evidence_ids", [])}))
+    db.save_case(case)
+
+    return {**result, "case_id": case_id, "question": question,
+           "disclaimer": "AI-generated from this case's evidence only. Not a decision, "
+                         "not legal advice, and not a substitute for reading the evidence."}
 
 
 @app.post("/api/investigations/{case_id}/review")
