@@ -30,7 +30,7 @@ structured case to a human — whose decision is the only one the system records
 | **Network in the request path** | None. Verified with outbound sockets blocked. |
 
 Internet is needed **once**, at setup, to fetch dependencies and models. After
-that the whole system runs offline — this is tested, not assumed.
+that the whole system runs offline.
 
 ---
 
@@ -39,16 +39,6 @@ that the whole system runs offline — this is tested, not assumed.
 ```bash
 python scripts/setup.py     # deps, Ollama models, database, RAG index, frontend
 python scripts/start.py     # API + web console, opens the browser
-```
-
-Or drive it from the terminal:
-
-```bash
-python run_demo.py                 # full TX-84721 investigation report
-python run_demo.py TX-90233        # the structuring scenario
-python run_demo.py --eval          # precision / recall / F1, per scenario
-pytest -q                          # 162 tests incl. red-team, prompt injection, sanctions matching,
-                                   # triage ordering, two-tier escalation, hash-chain integrity
 ```
 
 **Without Ollama it still works.** Narratives fall back to a deterministic
@@ -126,8 +116,7 @@ live from `aci/config.py`, not a paraphrase that could drift from the code.
   CBUAE, MAS and FATF, each with `source_url`, publication date and version.
   Summaries are our own paraphrase, never quoted statute text. Below a
   relevance floor the system says *"Insufficient information in the configured
-  regulatory knowledge base."* rather than reaching for a weak match. See
-  [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
+  regulatory knowledge base."* rather than reaching for a weak match.
 - **Sanctions is a floor, not a weighted dimension.** A confirmed watchlist
   match forces a HIGH band while the weighted score stays visible and
   unchanged, and the UI says the band was *raised*. At any defensible weight
@@ -177,7 +166,7 @@ live from `aci/config.py`, not a paraphrase that could drift from the code.
 
 ## Measured results
 
-`python run_demo.py --eval` over 5,000 synthetic transactions (seed 7):
+Evaluation (`aci/evaluation/`) over 5,000 synthetic transactions (seed 7):
 
 | Metric | Value |
 |---|---|
@@ -194,8 +183,8 @@ honest result rather than a missing update:** the evaluation population
 contains no watchlist matches, so the screening agent runs on all 5,000 cases
 and correctly returns clean every time. What that *does* establish is a
 zero-false-positive rate at scale — the failure mode that actually sinks
-screening systems. The matching logic itself is exercised by 24 unit tests and
-by the deliberate hit/near-miss demo pair (`TX-66150` / `TX-66151`), which are
+screening systems. The matching logic itself is exercised by the deliberate
+hit/near-miss demo pair (`TX-66150` / `TX-66151`), which are
 identical in customer, corridor, amount band and documentation and produce an
 identical weighted score of 0.545 — so the band difference between them is
 attributable to screening alone. Only mean case time moved (11.1 → 12.9 ms),
@@ -209,8 +198,7 @@ persistent risk rating). That last group is precision's real cost here: an
 RBA system is *supposed* to flag more cases for a customer it already
 considers higher-risk, even when nothing else is wrong, and this dataset
 reflects that honestly rather than hiding it. An earlier generator with none
-of this near-miss population scored a meaningless F1 of 1.000. Reproduce with
-the command above; nothing here is hand-tuned for presentation.
+of this near-miss population scored a meaningless F1 of 1.000. Nothing here is hand-tuned for presentation.
 
 Case generation with the local LLM narrative takes ~25 s on CPU-only inference,
 within the project's <60 s target. On a working CUDA path it is 1–2 s.
@@ -326,9 +314,8 @@ frontend/            React + Vite console (VIGILO theme + Recharts), incl.
                      InvestigationTimeline.jsx, the RBA landing/login page,
                      and cybercrime/ (command center · case ops · live feed ·
                      Leaflet heat map · intelligence graph)
-scripts/             setup · start · export_dataset
+scripts/             setup · start
 db/schema.sql        SQLite schema
-docs/                blueprint · PROVENANCE · DATASET_CARD
 ```
 
 ---
@@ -371,8 +358,7 @@ oversight:
   scope. Both are payment-operations concerns; this system investigates
   transactions, it doesn't move money, and bolting on a rail it can't
   actually settle over would be a demo rather than a capability.
-- **Licensed sanctions feed** — the bundled list is fabricated (see
-  [`docs/PROVENANCE.md`](docs/PROVENANCE.md)). Production screening needs a
+- **Licensed sanctions feed** — the bundled list is fabricated. Production screening needs a
   licensed feed with versioning, delta updates and a documented refresh
   cadence, plus phonetic/cross-script matching and date-of-birth
   corroboration. `aci/agents/sanctions_agent.py` publishes its own
@@ -389,4 +375,4 @@ oversight:
 ## Licence
 
 MIT — see [`LICENSE`](LICENSE). Models are downloaded at setup, not
-redistributed; both are Apache-2.0. See [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
+redistributed; both are Apache-2.0.

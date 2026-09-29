@@ -122,8 +122,6 @@ def main() -> None:
 
     print("\n" + "=" * 46)
     print("Setup complete. To run:\n")
-    print("  python run_demo.py                 # CLI investigation report")
-    print("  python run_demo.py --eval          # evaluation metrics")
     print("  python scripts/start.py            # API + web console together")
     print("\nThe application runs fully offline from here on.")
 

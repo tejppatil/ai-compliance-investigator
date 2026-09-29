@@ -33,3 +33,13 @@ frontend/smoke-shots/
 
 # Packaged skill bundles
 *.skill
+
+# Local-only material, kept off the repo
+.claude/
+docs/
+tests/
+run_demo.py
+scripts/demo_new_features.py
+scripts/export_dataset.py
+frontend/smoke-test.mjs
+hackathon_video_script.md
